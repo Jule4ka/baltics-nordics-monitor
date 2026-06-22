@@ -29,7 +29,9 @@ jobs:
       run: pip install jupyter lxml pandas requests beautifulsoup4 html5lib
     - name: Scraping relevant data lrt_lt
       run: jupyter nbconvert --to notebook --execute "lrt_lt.ipynb" --stdout
-    - name: Scrapting relevant data el pais
+    - name: Scraping relevant data lsm_lv
+      run: jupyter nbconvert --to notebook --execute "lsm_lv.ipynb" --stdout
+    - name: Scraping relevant data el pais
       run: jupyter nbconvert --to notebook --execute "el_pais.ipynb" --stdout
     - name: Commit and push any changes
       run: |-
