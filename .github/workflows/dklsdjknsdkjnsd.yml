@@ -32,7 +32,7 @@ jobs:
     - name: Scraping relevant data lsm_lv
       run: jupyter nbconvert --to notebook --execute "lsm_lv.ipynb" --stdout
     - name: Scraping relevant data el_pais
-      run: jupyter nbconvert --to notebook --execute "el_pais.ipynb" --stdout
+      run: jupyter nbconvert --to notebook --execute "err_ee.ipynb" --stdout
     - name: Commit and push any changes
       run: |-
         git config user.name "Automated"
