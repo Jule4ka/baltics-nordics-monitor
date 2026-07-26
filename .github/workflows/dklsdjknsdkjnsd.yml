@@ -31,7 +31,7 @@ jobs:
       run: jupyter nbconvert --to notebook --execute "lrt_lt.ipynb" --stdout
     - name: Scraping relevant data lsm_lv
       run: jupyter nbconvert --to notebook --execute "lsm_lv.ipynb" --stdout
-    - name: Scraping relevant data el_pais
+    - name: Scraping relevant data err_ee
       run: jupyter nbconvert --to notebook --execute "err_ee.ipynb" --stdout
     - name: Commit and push any changes
       run: |-
