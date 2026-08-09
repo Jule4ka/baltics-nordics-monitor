@@ -15,7 +15,7 @@ Pipeline:
      (Canvas topic map) + a data JSON + a clustered CSV.
 
 Run:  venv/Scripts/python.exe topic_analysis.py
-Output: analysis/nordics-monitor.html  (drop into jule4ka.github.io/content/nordics-monitor/)
+Output: analysis/nordics-monitor.html  (published to jule4ka.github.io/content/baltics_monitor/)
 """
 import sys, os, re, json, warnings, datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -353,35 +353,40 @@ body{margin:0;background:var(--bg);color:var(--ink);
   line-height:1.55;-webkit-font-smoothing:antialiased;}
 .mono{font-family:ui-monospace,"SF Mono","Cascadia Code","Cascadia Mono",Consolas,monospace;}
 /* faint woven-textile watermark (Baltic diamond net) in the paper margins, behind all content */
-body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.09;
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.13;
   background:var(--gold);
   -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;
           mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;}
 .shell{max-width:1180px;margin:0 auto;padding:0 22px;position:relative;z-index:1;}
-header{padding:46px 0 30px;border-bottom:3px double var(--gold);}
+header{margin:24px 0 0;padding:42px 36px 30px;border:3px solid var(--gold);border-radius:9px;
+  background:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='48'%20height='48'%3E%3Cg%20fill='none'%20stroke='%23fdf3e0'%20stroke-opacity='0.20'%20stroke-width='1.2'%3E%3Cpath%20d='M24%206L42%2024L24%2042L6%2024Z'/%3E%3Crect%20x='12'%20y='12'%20width='24'%20height='24'/%3E%3C/g%3E%3Cg%20fill='%23fdf3e0'%20fill-opacity='0.18'%3E%3Ccircle%20cx='24'%20cy='24'%20r='1.6'/%3E%3Ccircle%20cx='0'%20cy='0'%20r='1.6'/%3E%3Ccircle%20cx='48'%20cy='0'%20r='1.6'/%3E%3Ccircle%20cx='0'%20cy='48'%20r='1.6'/%3E%3Ccircle%20cx='48'%20cy='48'%20r='1.6'/%3E%3C/g%3E%3C/svg%3E") repeat,
+    linear-gradient(150deg,#7a2618 0%,#5a1c11 55%,#45150d 100%);
+  color:#fdf3e0;box-shadow:var(--shadow),inset 0 0 0 1px rgba(0,0,0,.22);position:relative;overflow:hidden;}
 .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:.2em;
-  text-transform:uppercase;color:var(--panel);background:var(--accent);font-weight:700;
-  padding:7px 14px;border-radius:3px;margin:0 0 20px;box-shadow:0 3px 0 var(--gold);}
-.eyebrow::before{content:"\\2734";font-size:13px;line-height:1;color:var(--gold);display:inline-block;}
+  text-transform:uppercase;color:#3a140e;background:var(--gold);font-weight:800;
+  padding:7px 14px;border-radius:3px;margin:0 0 22px;box-shadow:0 3px 0 rgba(0,0,0,.28);}
+.eyebrow::before{content:"\\2734";font-size:13px;line-height:1;color:#8f2417;display:inline-block;}
 h1{font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
-  font-size:clamp(35px,5.4vw,60px);line-height:1.01;margin:0 0 15px;font-weight:700;
-  letter-spacing:-.02em;text-wrap:balance;max-width:15ch;}
-.lede{color:var(--muted);font-size:16px;max-width:64ch;margin:0;}
-.stats{display:flex;flex-wrap:wrap;gap:0;margin-top:28px;
-  border:2px solid var(--gold);border-radius:6px;overflow:hidden;background:var(--panel);}
-.stat{flex:1 1 140px;padding:16px 18px;border-right:1px solid var(--border);}
+  font-size:clamp(38px,5.8vw,64px);line-height:1.0;margin:0 0 16px;font-weight:700;
+  letter-spacing:-.02em;text-wrap:balance;max-width:15ch;color:#fdf3e0;
+  text-shadow:0 2px 10px rgba(0,0,0,.3);}
+.lede{color:rgba(253,243,224,.84);font-size:16.5px;max-width:60ch;margin:0;}
+.stats{display:flex;flex-wrap:wrap;gap:0;margin-top:30px;
+  border:none;border-top:2px solid rgba(255,236,210,.32);border-radius:0;overflow:visible;background:transparent;}
+.stat{flex:1 1 140px;padding:16px 18px 2px;border-right:1px solid rgba(255,236,210,.18);}
 .stat:last-child{border-right:0}
-.stat .n{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--accent);}
-.stat .l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);margin-top:3px;}
+.stat .n{font-size:29px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--gold);}
+.stat .l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(253,243,224,.66);margin-top:3px;}
 main{padding:30px 0 10px;}
-.panel{background:var(--panel);border:2px solid var(--gold);border-radius:7px;
-  box-shadow:var(--shadow);overflow:hidden;}
+.panel{background:var(--panel);border:3px solid var(--gold);border-radius:6px;
+  box-shadow:var(--shadow);overflow:hidden;outline:2px solid var(--accent);outline-offset:3px;
+  margin-bottom:6px;}
 .panel-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
-  padding:15px 20px;border-bottom:2px solid var(--gold);flex-wrap:wrap;
-  background:color-mix(in srgb,var(--gold) 15%,var(--panel));}
+  padding:13px 20px;flex-wrap:wrap;background:var(--gold);
+  border-bottom:2px solid color-mix(in srgb,var(--accent) 55%,var(--gold));}
 .panel-h h2{margin:0;font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
-  font-size:18px;font-weight:700;letter-spacing:-.005em;color:var(--ink);}
-.panel-h .hint{font-size:12px;color:var(--muted);}
+  font-size:18px;font-weight:700;letter-spacing:-.005em;color:#2b140f;}
+.panel-h .hint{font-size:12px;color:#5c3c1c;font-weight:500;}
 .mapwrap{position:relative;}
 #map{display:block;width:100%;height:560px;touch-action:none;}
 #legend{position:absolute;top:14px;right:14px;display:flex;flex-direction:column;gap:2px;
@@ -398,11 +403,13 @@ main{padding:30px 0 10px;}
   font-size:12.5px;line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.28);}
 #tip b{display:block;margin-bottom:3px;font-weight:600;}
 #tip .meta{opacity:.72;font-size:11px;}
-.section-h{margin:44px 0 6px;font-size:14px;letter-spacing:.16em;text-transform:uppercase;
+.section-h{margin:46px 0 8px;font-size:15px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--muted);font-weight:700;display:flex;align-items:center;gap:13px;}
-.sec-sign{width:30px;height:30px;flex:0 0 auto;color:var(--accent);padding:4px;
-  background:color-mix(in srgb,var(--gold) 22%,var(--panel));
-  border:1.5px solid var(--gold);border-radius:50%;}
+.section-h::after{content:"";flex:1;height:2px;margin-left:6px;
+  background:linear-gradient(90deg,var(--gold),color-mix(in srgb,var(--gold) 20%,transparent) 70%,transparent);}
+.sec-sign{width:32px;height:32px;flex:0 0 auto;color:var(--accent);padding:4px;
+  background:color-mix(in srgb,var(--gold) 26%,var(--panel));
+  border:2px solid var(--gold);border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.12);}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin:16px 0 10px;}
 .card{background:var(--panel);border:1.5px solid var(--border);border-radius:7px;padding:15px 18px;
   border-top:5px solid var(--dot);box-shadow:var(--shadow);}
@@ -636,7 +643,7 @@ function renderLegend(){
 // per-theme cards — the article list is hidden until you select (click) a theme
 function renderCards(){
   document.getElementById('cards').innerHTML = D.themes.map(t=>{
-    const arts = D.points.filter(p=>p.c===t.id);
+    const arts = D.points.filter(p=>p.c===t.id).sort((a,b)=>b.d.localeCompare(a.d));
     const col = C[t.id];
     const li = arts.map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
     return `<div class="card" style="--dot:${col}"><h3 class="card-h">`
@@ -656,9 +663,8 @@ function renderFreq(){
   const K = D.keywords || [];
   const maxn = Math.max(...K.map(k=>k.n), 1);
   document.getElementById('freq').innerHTML = K.map(k=>{
-    const li = k.arts.map(i=>{ const p = D.points[i];
-      return `<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`;
-    }).join('');
+    const li = k.arts.map(i=>D.points[i]).sort((a,b)=>b.d.localeCompare(a.d))
+      .map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
     return `<div class="freq-item"><div class="freq-row" tabindex="0" role="button" aria-expanded="false">`
       + `<span class="freq-term">${k.term}</span>`
       + `<div class="freq-track"><div class="freq-fill" style="width:${(k.n/maxn*100).toFixed(1)}%"></div></div>`
