@@ -91,13 +91,11 @@ Notebooks use paths relative to the repo root — run them from the repo root
 2. executes the three scraper notebooks,
 3. runs `topic_analysis.py`,
 4. commits the refreshed `data/` + `analysis/` back to this repo,
-5. **publishes** to the personal site, a **Nikola** site
-   (`Jule4ka/Jule4ka.github.io`) whose **GitHub Pages serves the `src` branch** —
-   its root holds the built site (with `.nojekyll`) and `jul_site/` holds the source.
-   Since the report is a self-contained static file (and Nikola copies `files/` to
-   the site root verbatim), the job clones `src` and commits the page in two places —
-   `jul_site/files/content/baltics_monitor/index.html` (source) and
-   `content/baltics_monitor/index.html` (served root) — no Nikola build required.
+5. **publishes** to the personal **Nikola** site (`Jule4ka/Jule4ka.github.io`):
+   the job clones the `src` branch, writes the report as a Nikola **page** at
+   `jul_site/pages/content/baltics_monitor.html` (the content-only artifact HTML +
+   `.. title:` / `.. slug: content/baltics_monitor` / `.. hidetitle: true` metadata),
+   then runs `nikola build` + `nikola github_deploy` to build and publish it.
    It goes live at **`jule4ka.github.io/content/baltics_monitor/`**.
 
 Publishing needs a repo secret **`PAGES_PUSH_TOKEN`** — a Personal Access Token
