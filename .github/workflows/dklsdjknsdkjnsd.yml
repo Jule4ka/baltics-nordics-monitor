@@ -46,13 +46,12 @@ jobs:
         timestamp=$(date -u)
         git commit -m "Latest data: ${timestamp}" || exit 0
         git push
-    # Publish the report to the Nikola site (Jule4ka/Jule4ka.github.io), mirroring the
-    # working "nordics-monitor" setup. The report is a FULL self-contained HTML document,
-    # so it must go under files/ (copied to the site root VERBATIM — no HTML compiler,
-    # no theme). A page under pages/ would be run through the compiler, which strips the
-    # top-level <style> block and wraps it in the blog theme → unstyled/broken.
-    # files/content/baltics_monitor/ -> served at /content/baltics_monitor/ (matches the
-    # nav link in conf.py). Then nikola build + github_deploy publishes it.
+    # Publish the report to the Nikola site (Jule4ka/Jule4ka.github.io). The report is a
+    # FULL self-contained HTML document, so it goes under files/ (copied to the site root
+    # VERBATIM — no HTML compiler, no theme). A page under pages/ would be run through the
+    # compiler, which strips the top-level <style> block and wraps it in the blog theme.
+    # Placed at files/baltics-monitor/ so it serves at the ROOT: /baltics-monitor/
+    # (the same top level as the other pages, e.g. /б/). Then nikola build + github_deploy.
     # Requires a repo secret PAGES_PUSH_TOKEN: a PAT with write access to that repo.
     - name: Publish report to jule4ka.github.io (Nikola files/ + github_deploy)
       env:
@@ -61,12 +60,12 @@ jobs:
         set -e
         git clone -b src "https://x-access-token:${PAGES_TOKEN}@github.com/Jule4ka/Jule4ka.github.io.git" pages_repo
         cd pages_repo
-        # Remove the broken page-based attempt + any stray root copy from earlier runs
+        # Remove earlier placements (broken page + the /content/baltics_monitor location)
         git rm --ignore-unmatch jul_site/pages/content/baltics_monitor.html >/dev/null 2>&1 || true
-        git rm -r --ignore-unmatch content/baltics_monitor >/dev/null 2>&1 || true
-        # Place the FULL standalone report as a static passthrough file (like nordics-monitor)
-        mkdir -p jul_site/files/content/baltics_monitor
-        cp "$GITHUB_WORKSPACE/analysis/nordics-monitor.html" jul_site/files/content/baltics_monitor/index.html
+        git rm -r --ignore-unmatch jul_site/files/content/baltics_monitor content/baltics_monitor >/dev/null 2>&1 || true
+        # Place the FULL standalone report as a static passthrough file at the site ROOT
+        mkdir -p jul_site/files/baltics-monitor
+        cp "$GITHUB_WORKSPACE/analysis/nordics-monitor.html" jul_site/files/baltics-monitor/index.html
         # Build + deploy
         pip install "Nikola[extras]"
         git config user.name "Automated"
