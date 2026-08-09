@@ -663,7 +663,6 @@ function renderCards(){
     return `<div class="card" style="--dot:${col}"><h3 class="card-h">`
       + `<span class="sw" style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>`
       + `${t.label}<span class="lc">${t.count}</span><span class="caret">▶</span></h3>`
-      + `<p class="kw">${t.kw}</p>`
       + `<p class="card-hint">click to read ${t.count} article${t.count>1?'s':''}</p>`
       + `<ul class="card-arts">${li}</ul></div>`;
   }).join('');
