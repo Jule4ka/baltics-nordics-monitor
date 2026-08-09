@@ -91,14 +91,13 @@ Notebooks use paths relative to the repo root — run them from the repo root
 2. executes the three scraper notebooks,
 3. runs `topic_analysis.py`,
 4. commits the refreshed `data/` + `analysis/` back to this repo,
-5. **publishes** to the personal **Nikola** site (`Jule4ka/Jule4ka.github.io`),
-   mirroring the existing `nordics-monitor`. The report is a full self-contained HTML
-   document, so it goes under **`files/`** (copied to the site root verbatim — no
-   compiler, no theme) at `jul_site/files/baltics-monitor/index.html`. A page under
-   `pages/` would instead be run through Nikola's HTML compiler, which strips the
-   top-level `<style>` block and wraps it in the blog theme → unstyled. Then
-   `nikola build` + `nikola github_deploy` publishes it, live at the site root:
-   **`jule4ka.github.io/baltics-monitor/`**.
+5. **publishes** to the personal **Nikola** site (`Jule4ka/Jule4ka.github.io`) as a
+   **page** under `pages/content/` (served at `/content/baltics_monitor/`). Nikola's
+   HTML page compiler strips a full document's top-level `<style>` (and the theme lets
+   its `body`/`*` rules leak), so `make_site_page.py` wraps the whole report in an
+   isolated `<iframe srcdoc="…">` — the design renders intact. Then `nikola build` +
+   `nikola github_deploy` publishes it, live at
+   **`jule4ka.github.io/content/baltics_monitor/`**.
 
 Publishing needs a repo secret **`PAGES_PUSH_TOKEN`** — a Personal Access Token
 with **write** access to `Jule4ka/Jule4ka.github.io`. Set it in this repo →
