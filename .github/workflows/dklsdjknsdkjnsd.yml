@@ -46,32 +46,27 @@ jobs:
         timestamp=$(date -u)
         git commit -m "Latest data: ${timestamp}" || exit 0
         git push
-    # Publish the report to the Nikola site (separate repo Jule4ka/Jule4ka.github.io).
-    # The report is added as a Nikola PAGE (templated with page.tmpl): the content-only
-    # artifact HTML + Nikola metadata, at jul_site/pages/content/baltics_monitor.html.
-    # `slug: content/baltics_monitor` puts it at /content/baltics_monitor/. Then
-    # `nikola github_deploy` builds the site and deploys it (commits source to `src`,
-    # pushes built output to the deploy branch).
+    # Publish the report to the Nikola site (Jule4ka/Jule4ka.github.io), mirroring the
+    # working "nordics-monitor" setup. The report is a FULL self-contained HTML document,
+    # so it must go under files/ (copied to the site root VERBATIM — no HTML compiler,
+    # no theme). A page under pages/ would be run through the compiler, which strips the
+    # top-level <style> block and wraps it in the blog theme → unstyled/broken.
+    # files/content/baltics_monitor/ -> served at /content/baltics_monitor/ (matches the
+    # nav link in conf.py). Then nikola build + github_deploy publishes it.
     # Requires a repo secret PAGES_PUSH_TOKEN: a PAT with write access to that repo.
-    - name: Publish report to jule4ka.github.io (Nikola page + github_deploy)
+    - name: Publish report to jule4ka.github.io (Nikola files/ + github_deploy)
       env:
         PAGES_TOKEN: ${{ secrets.PAGES_PUSH_TOKEN }}
       run: |-
         set -e
         git clone -b src "https://x-access-token:${PAGES_TOKEN}@github.com/Jule4ka/Jule4ka.github.io.git" pages_repo
         cd pages_repo
-        # Drop earlier wrong locations if present (they'd otherwise collide on build)
-        git rm -r --ignore-unmatch jul_site/files/content/baltics_monitor content/baltics_monitor >/dev/null 2>&1 || true
-        # Write the report as a Nikola page: metadata header + content-only artifact HTML
-        mkdir -p jul_site/pages/content
-        {
-          echo '<!--'
-          echo '.. title: Baltic Defence & Geopolitics Monitor'
-          echo '.. slug: content/baltics_monitor'
-          echo '.. hidetitle: true'
-          echo '-->'
-          cat "$GITHUB_WORKSPACE/analysis/nordics-monitor-artifact.html"
-        } > jul_site/pages/content/baltics_monitor.html
+        # Remove the broken page-based attempt + any stray root copy from earlier runs
+        git rm --ignore-unmatch jul_site/pages/content/baltics_monitor.html >/dev/null 2>&1 || true
+        git rm -r --ignore-unmatch content/baltics_monitor >/dev/null 2>&1 || true
+        # Place the FULL standalone report as a static passthrough file (like nordics-monitor)
+        mkdir -p jul_site/files/content/baltics_monitor
+        cp "$GITHUB_WORKSPACE/analysis/nordics-monitor.html" jul_site/files/content/baltics_monitor/index.html
         # Build + deploy
         pip install "Nikola[extras]"
         git config user.name "Automated"
