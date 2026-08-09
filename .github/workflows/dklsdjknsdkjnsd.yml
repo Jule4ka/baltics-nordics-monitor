@@ -46,24 +46,25 @@ jobs:
         timestamp=$(date -u)
         git commit -m "Latest data: ${timestamp}" || exit 0
         git push
-    # Publish the report to the Nikola site as a PAGE under pages/content/ (next to the
-    # other pages), served at /content/baltics_monitor/. Nikola's HTML page compiler
-    # strips a full document's <style> (and the theme lets its body/* rules leak), so the
-    # page embeds the whole standalone report in an <iframe srcdoc="..."> (isolated),
-    # which renders the design intact. make_site_page.py builds that page.
+    # Publish the report to the Nikola site (Jule4ka/Jule4ka.github.io). The report is a
+    # FULL self-contained HTML document, so it goes under files/ (copied to the site root
+    # VERBATIM — no compiler, no theme). At files/content/baltics_monitor/ it serves at
+    # /content/baltics_monitor/ as a stand-alone FULL-SCREEN page (matching the nav link
+    # in conf.py). Then nikola build + github_deploy publishes it.
     # Requires a repo secret PAGES_PUSH_TOKEN: a PAT with write access to that repo.
-    - name: Publish report to jule4ka.github.io (Nikola page + github_deploy)
+    - name: Publish report to jule4ka.github.io (files/ + github_deploy)
       env:
         PAGES_TOKEN: ${{ secrets.PAGES_PUSH_TOKEN }}
       run: |-
         set -e
         git clone -b src "https://x-access-token:${PAGES_TOKEN}@github.com/Jule4ka/Jule4ka.github.io.git" pages_repo
         cd pages_repo
-        # Clean up every earlier placement so nothing collides on build
-        git rm -r --ignore-unmatch jul_site/files/baltics-monitor jul_site/files/content/baltics_monitor content/baltics_monitor >/dev/null 2>&1 || true
-        # Build the Nikola page (iframe-wrapped report) at pages/content/baltics_monitor.html
-        mkdir -p jul_site/pages/content
-        python "$GITHUB_WORKSPACE/make_site_page.py" "$GITHUB_WORKSPACE/analysis/nordics-monitor.html" jul_site/pages/content/baltics_monitor.html
+        # Remove earlier attempts (the pages/ iframe page + any stray placements)
+        git rm --ignore-unmatch jul_site/pages/content/baltics_monitor.html >/dev/null 2>&1 || true
+        git rm -r --ignore-unmatch jul_site/files/baltics-monitor content/baltics_monitor >/dev/null 2>&1 || true
+        # Place the FULL standalone report as a verbatim static file -> full-screen page
+        mkdir -p jul_site/files/content/baltics_monitor
+        cp "$GITHUB_WORKSPACE/analysis/nordics-monitor.html" jul_site/files/content/baltics_monitor/index.html
         # Build + deploy
         pip install "Nikola[extras]"
         git config user.name "Automated"
