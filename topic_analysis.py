@@ -130,9 +130,10 @@ THEMES = [
                            r"rearm|conscript|mobilis|mobiliz"),
     ("Drones & airspace",  r"drone|airspace|uav|incursion|airport|warplane|aircraft|\bjet\b"),
     ("Border & migration", r"border|migrant|refugee|belarus|frontier|fence|smuggl|crossing|barbed"),
-    ("Hybrid & sabotage",  r"sabotag|cyber|espionage|\bspy|hybrid|disinfo|jamming|\bgps\b|"
-                           r"undersea|cable|provocation|shadow fleet"),
-    ("China",              r"china|chinese|beijing"),
+    ("Hybrid & cognitive warfare",
+                           r"sabotag|cyber|espionage|\bspy|hybrid|disinfo|propaganda|interfer|"
+                           r"meddl|cognitive|influence\s+oper|jamming|\bgps\b|undersea|cable|"
+                           r"shadow fleet|provocation|coercion|china|chinese|beijing"),
 ]
 THEME_OTHER = "Other defence"
 THEME_PATS = [re.compile(p, re.I) for _, p in THEMES]
@@ -140,14 +141,13 @@ THEME_PATS = [re.compile(p, re.I) for _, p in THEMES]
 # Categorical palette (validated reference hues), light + dark step per theme id.
 # Identity is carried mainly by the on-map labels; colour reinforces. Last = grey "Other".
 THEME_COLORS = [
-    ("#2a78d6", "#3987e5"),  # 0 Ukraine            blue
-    ("#eb6834", "#d95926"),  # 1 Russia & Kremlin   orange
-    ("#1baf7a", "#199e70"),  # 2 NATO & defence     aqua
-    ("#eda100", "#c98500"),  # 3 Drones & airspace  yellow
-    ("#e87ba4", "#d55181"),  # 4 Border & migration magenta
-    ("#1f9e46", "#37b25c"),  # 5 Hybrid & sabotage  green
-    ("#7a68c4", "#9085e9"),  # 6 China              violet
-    ("#9a8f7c", "#8f836d"),  # 7 Other defence      warm grey
+    ("#2a78d6", "#3987e5"),  # 0 Ukraine                    blue
+    ("#eb6834", "#d95926"),  # 1 Russia & Kremlin           orange
+    ("#1baf7a", "#199e70"),  # 2 NATO & defence             teal-green
+    ("#eda100", "#c98500"),  # 3 Drones & airspace          yellow
+    ("#e87ba4", "#d55181"),  # 4 Border & migration         magenta
+    ("#7a68c4", "#9085e9"),  # 5 Hybrid & cognitive warfare violet
+    ("#9a8f7c", "#8f836d"),  # 6 Other defence              warm grey
 ]
 COLORS_LIGHT = [c[0] for c in THEME_COLORS]
 COLORS_DARK = [c[1] for c in THEME_COLORS]
