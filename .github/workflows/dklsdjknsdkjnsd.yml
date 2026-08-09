@@ -26,7 +26,9 @@ jobs:
       with:
         python-version: '3.14'
     - name: Install all necessary packages
-      run: pip install jupyter lxml pandas requests beautifulsoup4 html5lib scikit-learn
+      run: |
+        pip install jupyter lxml pandas requests beautifulsoup4 html5lib scikit-learn playwright playwright-stealth
+        playwright install --with-deps chromium
     - name: Scraping relevant data lrt_lt
       run: jupyter nbconvert --to notebook --execute "lrt_lt.ipynb" --stdout
     - name: Scraping relevant data lsm_lv
@@ -51,11 +53,11 @@ jobs:
         PAGES_TOKEN: ${{ secrets.PAGES_PUSH_TOKEN }}
       run: |-
         git clone --depth 1 "https://x-access-token:${PAGES_TOKEN}@github.com/jule4ka/jule4ka.github.io.git" pages_repo
-        mkdir -p pages_repo/content/nordics-monitor
-        cp nordics-monitor.html pages_repo/content/nordics-monitor/index.html
+        mkdir -p pages_repo/content
+        cp analysis/nordics-monitor.html pages_repo/content/baltics-monitor.html
         cd pages_repo
         git config user.name "Automated"
         git config user.email "actions@users.noreply.github.com"
-        git add content/nordics-monitor/index.html
+        git add content/baltics-monitor.html
         git commit -m "Update Nordics/Baltics topic map: $(date -u)" || exit 0
         git push
