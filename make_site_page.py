@@ -12,25 +12,36 @@ Usage:
     python make_site_page.py analysis/nordics-monitor.html <out.html>
 """
 import io
+import json
 import sys
 
 
 def build(report_html: str) -> str:
-    # srcdoc is a double-quoted attribute: escape & first, then ".
-    srcdoc = report_html.replace("&", "&amp;").replace('"', "&quot;")
+    # Embed the report as a JS string and build the <iframe srcdoc> at runtime.
+    # Nikola's HTML page compiler strips <style> and mangles escaped attributes, but it
+    # leaves <script> content untouched — so we carry the whole document inside a script.
+    # json.dumps makes a valid JS string; escape "</" so a nested </script> can't close us.
+    js = json.dumps(report_html).replace("</", "<\\/")
     return (
         "<!--\n"
         ".. title: Baltic Defence & Geopolitics Monitor\n"
         ".. slug: baltics_monitor\n"          # folder pages/content/ -> /content/baltics_monitor/
         ".. hidetitle: true\n"
         "-->\n"
-        '<iframe id="baltics-monitor" title="Baltic Defence &amp; Geopolitics Monitor" '
-        'srcdoc="' + srcdoc + '" '
-        'style="width:100%;border:0;display:block;min-height:100vh" scrolling="no"></iframe>\n'
-        "<script>(function(){var f=document.getElementById('baltics-monitor');"
-        "function r(){try{f.style.height="
-        "f.contentWindow.document.documentElement.scrollHeight+'px';}catch(e){}}"
-        "f.addEventListener('load',r);setInterval(r,1200);})();</script>\n"
+        '<div id="baltics-monitor-mount"></div>\n'
+        "<script>\n"
+        "var BALTICS_MONITOR_HTML = " + js + ";\n"
+        "(function(){\n"
+        "  var f = document.createElement('iframe');\n"
+        "  f.title = 'Baltic Defence \\u0026 Geopolitics Monitor';\n"
+        "  f.setAttribute('style','width:100%;border:0;min-height:100vh;display:block');\n"
+        "  f.srcdoc = BALTICS_MONITOR_HTML;\n"
+        "  function resize(){try{f.style.height="
+        "f.contentWindow.document.documentElement.scrollHeight+'px';}catch(e){}}\n"
+        "  f.addEventListener('load', function(){resize(); setInterval(resize, 1200);});\n"
+        "  document.getElementById('baltics-monitor-mount').appendChild(f);\n"
+        "})();\n"
+        "</script>\n"
     )
 
 
