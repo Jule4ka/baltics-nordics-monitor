@@ -47,25 +47,25 @@ jobs:
         git commit -m "Latest data: ${timestamp}" || exit 0
         git push
     # Publish the report to the Nikola site (separate repo Jule4ka/Jule4ka.github.io).
-    # That site keeps its SOURCE on branch `src` (in jul_site/) and serves the BUILT
-    # output from branch `main`. So we drop the page into the Nikola static-files tree
-    # on `src`, then let `nikola github_deploy` build and push the result to `main`.
+    # GitHub Pages serves the `src` branch, whose ROOT holds the built site (with a
+    # .nojekyll), and whose jul_site/ holds the Nikola source. Our page is a
+    # self-contained static file, and Nikola copies files/ to the site root verbatim,
+    # so we commit the SAME file to `src` in two places — no Nikola build needed:
+    #   - jul_site/files/content/baltics_monitor/index.html  (source; survives rebuilds)
+    #   - content/baltics_monitor/index.html                 (served root; live immediately)
     # Requires a repo secret PAGES_PUSH_TOKEN: a PAT with write access to that repo.
-    - name: Publish report to jule4ka.github.io (Nikola)
+    - name: Publish report to jule4ka.github.io (src branch)
       env:
         PAGES_TOKEN: ${{ secrets.PAGES_PUSH_TOKEN }}
       run: |-
         set -e
-        # 1. Clone the site's source branch (full history so github_deploy can push to main)
-        git clone -b src "https://x-access-token:${PAGES_TOKEN}@github.com/Jule4ka/Jule4ka.github.io.git" pages_repo
-        # 2. Drop the freshly generated page into the Nikola static files tree.
-        #    files/ is copied to the site root, so this serves at /content/baltics_monitor/
-        mkdir -p pages_repo/jul_site/files/content/baltics_monitor
+        git clone -b src --depth 1 "https://x-access-token:${PAGES_TOKEN}@github.com/Jule4ka/Jule4ka.github.io.git" pages_repo
+        mkdir -p pages_repo/jul_site/files/content/baltics_monitor pages_repo/content/baltics_monitor
         cp analysis/nordics-monitor.html pages_repo/jul_site/files/content/baltics_monitor/index.html
-        # 3. Build the Nikola site and deploy the output to `main` (GitHub Pages).
-        pip install "Nikola[extras]"
-        cd pages_repo/jul_site
+        cp analysis/nordics-monitor.html pages_repo/content/baltics_monitor/index.html
+        cd pages_repo
         git config user.name "Automated"
         git config user.email "actions@users.noreply.github.com"
-        nikola build
-        nikola github_deploy -m "Update Baltics monitor: $(date -u)"
+        git add jul_site/files/content/baltics_monitor/index.html content/baltics_monitor/index.html
+        git commit -m "Update Baltics monitor: $(date -u)" || exit 0
+        git push
