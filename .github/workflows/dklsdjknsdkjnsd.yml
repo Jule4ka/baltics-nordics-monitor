@@ -14,7 +14,8 @@ permissions:
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */2 * * *'
+    # once a day, 05:00 UTC
+    - cron: '0 5 * * *'
 jobs:
   daily:
     runs-on: ubuntu-latest
@@ -45,19 +46,26 @@ jobs:
         timestamp=$(date -u)
         git commit -m "Latest data: ${timestamp}" || exit 0
         git push
-    # Publish the generated report to the GitHub Pages site (separate repo).
-    # Requires a repo secret named PAGES_PUSH_TOKEN: a Personal Access Token
-    # with write access to jule4ka/jule4ka.github.io.
-    - name: Publish topic map to GitHub Pages
+    # Publish the report to the Nikola site (separate repo Jule4ka/Jule4ka.github.io).
+    # That site keeps its SOURCE on branch `src` (in jul_site/) and serves the BUILT
+    # output from branch `main`. So we drop the page into the Nikola static-files tree
+    # on `src`, then let `nikola github_deploy` build and push the result to `main`.
+    # Requires a repo secret PAGES_PUSH_TOKEN: a PAT with write access to that repo.
+    - name: Publish report to jule4ka.github.io (Nikola)
       env:
         PAGES_TOKEN: ${{ secrets.PAGES_PUSH_TOKEN }}
       run: |-
-        git clone --depth 1 "https://x-access-token:${PAGES_TOKEN}@github.com/jule4ka/jule4ka.github.io.git" pages_repo
-        mkdir -p pages_repo/content
-        cp analysis/nordics-monitor.html pages_repo/content/baltics-monitor.html
-        cd pages_repo
+        set -e
+        # 1. Clone the site's source branch (full history so github_deploy can push to main)
+        git clone -b src "https://x-access-token:${PAGES_TOKEN}@github.com/Jule4ka/Jule4ka.github.io.git" pages_repo
+        # 2. Drop the freshly generated page into the Nikola static files tree.
+        #    files/ is copied to the site root, so this serves at /content/baltics_monitor/
+        mkdir -p pages_repo/jul_site/files/content/baltics_monitor
+        cp analysis/nordics-monitor.html pages_repo/jul_site/files/content/baltics_monitor/index.html
+        # 3. Build the Nikola site and deploy the output to `main` (GitHub Pages).
+        pip install "Nikola[extras]"
+        cd pages_repo/jul_site
         git config user.name "Automated"
         git config user.email "actions@users.noreply.github.com"
-        git add content/baltics-monitor.html
-        git commit -m "Update Nordics/Baltics topic map: $(date -u)" || exit 0
-        git push
+        nikola build
+        nikola github_deploy -m "Update Baltics monitor: $(date -u)"

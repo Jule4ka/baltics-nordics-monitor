@@ -86,17 +86,22 @@ Notebooks use paths relative to the repo root — run them from the repo root
 
 ## Automation & publishing
 
-`.github/workflows/` runs every 2 hours (and on demand):
+`.github/workflows/` runs **once a day** (05:00 UTC) and on demand:
 1. installs deps (incl. Playwright + Chromium),
 2. executes the three scraper notebooks,
 3. runs `topic_analysis.py`,
 4. commits the refreshed `data/` + `analysis/` back to this repo,
-5. **publishes** `analysis/nordics-monitor.html` to the Pages site at
-   **`jule4ka.github.io/content/baltics-monitor.html`**.
+5. **publishes** to the personal site, which is a **Nikola** site
+   (`Jule4ka/Jule4ka.github.io`): source on branch `src` (under `jul_site/`),
+   built output served from branch `main`. The job clones `src`, drops the page
+   at `jul_site/files/content/baltics_monitor/index.html`, then runs
+   `nikola build` + `nikola github_deploy` to publish it to `main`. It goes live at
+   **`jule4ka.github.io/content/baltics_monitor/`**.
 
 Publishing needs a repo secret **`PAGES_PUSH_TOKEN`** — a Personal Access Token
-with write access to the `jule4ka/jule4ka.github.io` repo. (Repo → Settings →
-Secrets and variables → Actions.)
+with **write** access to `Jule4ka/Jule4ka.github.io` (it pushes to both `src` and
+`main`). Set it in this repo → Settings → Secrets and variables → Actions.
+The site's Pages must be configured to serve from the `main` branch.
 
 ## Caveats
 
