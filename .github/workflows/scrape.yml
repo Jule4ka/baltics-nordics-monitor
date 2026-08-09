@@ -1,0 +1,47 @@
+name: scrape
+
+# Collect fresh headlines often. This job ONLY scrapes and commits data —
+# it does not build or publish the dashboard (see dashboard.yml for that).
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  schedule:
+    # every 3 hours
+    - cron: '0 */3 * * *'
+
+# If a scrape is still running when the next one fires, let it finish first.
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out this repo
+      uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14'
+    - name: Install scraping packages
+      run: |
+        pip install jupyter lxml pandas requests beautifulsoup4 html5lib playwright playwright-stealth
+        playwright install --with-deps chromium
+    - name: Scrape LRT (Lithuania)
+      run: jupyter nbconvert --to notebook --execute "lrt_lt.ipynb" --stdout
+    - name: Scrape LSM (Latvia)
+      run: jupyter nbconvert --to notebook --execute "lsm_lv.ipynb" --stdout
+    - name: Scrape ERR (Estonia)
+      run: jupyter nbconvert --to notebook --execute "err_ee.ipynb" --stdout
+    - name: Commit and push scraped data
+      run: |-
+        git config user.name "Automated"
+        git config user.email "actions@users.noreply.github.com"
+        git add -A
+        git commit -m "Scrape data: $(date -u)" || exit 0
+        # Another scrape or the daily dashboard may have pushed meanwhile.
+        git pull --rebase --autostash origin main || true
+        git push

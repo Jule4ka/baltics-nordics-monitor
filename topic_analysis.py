@@ -43,6 +43,10 @@ FILES = {
 }
 SRC_LABEL = {"err_ee": "ERR (Estonia)", "lrt_lt": "LRT (Lithuania)", "lsm_lv": "LSM (Latvia)"}
 SRC_CODE = {"err_ee": "EE", "lrt_lt": "LT", "lsm_lv": "LV"}
+# Landing page each source is scraped from — the country shapes link back to these.
+SRC_HOME = {"err_ee": "https://news.err.ee/",
+            "lrt_lt": "https://www.lrt.lt/en/news-in-english",
+            "lsm_lv": "https://eng.lsm.lv"}
 
 # Real EE/LV/LT borders, projected to a shared SVG viewbox (see scratchpad/build_baltic_svg.py).
 # Baked in so the pipeline stays offline; geometry is static, only the shading changes per run.
@@ -130,7 +134,7 @@ THEMES = [
                            r"rearm|conscript|mobilis|mobiliz"),
     ("Drones & airspace",  r"drone|airspace|uav|incursion|airport|warplane|aircraft|\bjet\b"),
     ("Border & migration", r"border|migrant|refugee|belarus|frontier|fence|smuggl|crossing|barbed"),
-    ("Hybrid & cognitive warfare",
+    ("Hybrid warfare",
                            r"sabotag|cyber|espionage|\bspy|hybrid|disinfo|propaganda|interfer|"
                            r"meddl|cognitive|influence\s+oper|jamming|\bgps\b|undersea|cable|"
                            r"shadow fleet|provocation|coercion|china|chinese|beijing"),
@@ -146,7 +150,7 @@ THEME_COLORS = [
     ("#1baf7a", "#199e70"),  # 2 NATO & defence             teal-green
     ("#eda100", "#c98500"),  # 3 Drones & airspace          yellow
     ("#e87ba4", "#d55181"),  # 4 Border & migration         magenta
-    ("#7a68c4", "#9085e9"),  # 5 Hybrid & cognitive warfare violet
+    ("#7a68c4", "#9085e9"),  # 5 Hybrid warfare              violet
     ("#9a8f7c", "#8f836d"),  # 6 Other defence              warm grey
 ]
 COLORS_LIGHT = [c[0] for c in THEME_COLORS]
@@ -321,6 +325,7 @@ def build_payload(df, themes, keywords, shares):
         "themes": themes, "points": points, "keywords": keywords,
         "colors": COLORS_LIGHT, "colorsDark": COLORS_DARK,
         "shares": shares, "map": BALTIC_MAP, "coverage": coverage,
+        "homes": {SRC_CODE[s]: SRC_HOME[s] for s in SRC_HOME},
     }
 
 
@@ -440,7 +445,9 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
 .country-map{flex:0 0 auto;width:min(300px,72vw);}
 .country-map svg{width:100%;height:auto;display:block;overflow:visible;}
 .geo{stroke:var(--panel);stroke-width:1.4;fill:var(--accent);transition:fill-opacity .25s,filter .12s;}
-.geo:hover{filter:brightness(1.07);}
+.geo-link{cursor:pointer;}
+.geo-link .geo:hover,.geo:hover{filter:brightness(1.07);}
+.geo-link:focus-visible .geo{outline:none;filter:brightness(1.1);stroke:var(--ink);stroke-width:2;}
 .geo-lab{fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3.6px;stroke-linejoin:round;
   font-weight:800;font-size:16px;text-anchor:middle;pointer-events:none;}
 .geo-sub{fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;
@@ -533,7 +540,7 @@ BODY = """
     <section class="panel">
       <div class="panel-h">
         <h2>Defence &amp; security share by country</h2>
-        <span class="hint mono">matching headlines ÷ all headlines</span>
+        <span class="hint mono">matching headlines ÷ all headlines · click a country to open its source</span>
       </div>
       <div class="country-wrap">
         <div class="country-map"><svg id="cmap" role="img"
@@ -597,11 +604,17 @@ const D = __DATA__;
   const fmt = iso => { if(!iso) return '—'; const [y,m,d] = iso.split('-'); return `${+d} ${MON[+m-1]} ${y}`; };
   const svg = document.getElementById('cmap');
   svg.setAttribute('viewBox', M.viewBox);
+  const homes = D.homes || {};
   let g = '';
   for (const code in M.paths){
     const s = by[code] || {country:code, pct:0, matched:0, total:0};
-    g += `<path class="geo" d="${M.paths[code]}" fill-opacity="${op(s.pct).toFixed(3)}">`
-       + `<title>${s.country} — ${s.pct}% defence (${s.matched}/${s.total})</title></path>`;
+    const home = homes[code];
+    const path = `<path class="geo" d="${M.paths[code]}" fill-opacity="${op(s.pct).toFixed(3)}">`
+       + `<title>${s.country} — ${s.pct}% defence (${s.matched}/${s.total})`
+       + `${home ? ' · click to open the source' : ''}</title></path>`;
+    g += home
+      ? `<a class="geo-link" href="${home}" target="_blank" rel="noopener">${path}</a>`
+      : path;
   }
   for (const code in M.centroids){
     const [cx, cy] = M.centroids[code], s = by[code] || {pct:0};
