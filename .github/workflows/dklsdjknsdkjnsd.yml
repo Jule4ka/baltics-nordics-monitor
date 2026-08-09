@@ -26,13 +26,15 @@ jobs:
       with:
         python-version: '3.14'
     - name: Install all necessary packages
-      run: pip install jupyter lxml pandas requests beautifulsoup4 html5lib
+      run: pip install jupyter lxml pandas requests beautifulsoup4 html5lib scikit-learn
     - name: Scraping relevant data lrt_lt
       run: jupyter nbconvert --to notebook --execute "lrt_lt.ipynb" --stdout
     - name: Scraping relevant data lsm_lv
       run: jupyter nbconvert --to notebook --execute "lsm_lv.ipynb" --stdout
     - name: Scraping relevant data err_ee
       run: jupyter nbconvert --to notebook --execute "err_ee.ipynb" --stdout
+    - name: Build defence/geopolitics topic map
+      run: python topic_analysis.py
     - name: Commit and push any changes
       run: |-
         git config user.name "Automated"
@@ -40,4 +42,20 @@ jobs:
         git add -A
         timestamp=$(date -u)
         git commit -m "Latest data: ${timestamp}" || exit 0
+        git push
+    # Publish the generated report to the GitHub Pages site (separate repo).
+    # Requires a repo secret named PAGES_PUSH_TOKEN: a Personal Access Token
+    # with write access to jule4ka/jule4ka.github.io.
+    - name: Publish topic map to GitHub Pages
+      env:
+        PAGES_TOKEN: ${{ secrets.PAGES_PUSH_TOKEN }}
+      run: |-
+        git clone --depth 1 "https://x-access-token:${PAGES_TOKEN}@github.com/jule4ka/jule4ka.github.io.git" pages_repo
+        mkdir -p pages_repo/content/nordics-monitor
+        cp nordics-monitor.html pages_repo/content/nordics-monitor/index.html
+        cd pages_repo
+        git config user.name "Automated"
+        git config user.email "actions@users.noreply.github.com"
+        git add content/nordics-monitor/index.html
+        git commit -m "Update Nordics/Baltics topic map: $(date -u)" || exit 0
         git push

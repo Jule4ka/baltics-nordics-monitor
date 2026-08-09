@@ -1,0 +1,220 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Baltic Defence &amp; Geopolitics Monitor</title></head><body><style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#141821; --muted:#5c6472; --faint:#8a92a3;
+  --border:#e3e6ec; --border2:#eef0f4; --accent:#c47d2b; --grid:#eceef2;
+  --shadow:0 1px 2px rgba(20,24,33,.04),0 8px 24px rgba(20,24,33,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b0e14; --panel:#12161f; --ink:#e7eaf0; --muted:#9aa3b2; --faint:#6b7382;
+    --border:#212734; --border2:#1a1f2a; --accent:#e6a13c; --grid:#1a1f2a;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme=light]{
+  --bg:#f5f6f8; --panel:#ffffff; --ink:#141821; --muted:#5c6472; --faint:#8a92a3;
+  --border:#e3e6ec; --border2:#eef0f4; --accent:#c47d2b; --grid:#eceef2;
+  --shadow:0 1px 2px rgba(20,24,33,.04),0 8px 24px rgba(20,24,33,.05);
+}
+:root[data-theme=dark]{
+  --bg:#0b0e14; --panel:#12161f; --ink:#e7eaf0; --muted:#9aa3b2; --faint:#6b7382;
+  --border:#212734; --border2:#1a1f2a; --accent:#e6a13c; --grid:#1a1f2a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  line-height:1.55;-webkit-font-smoothing:antialiased;}
+.mono{font-family:ui-monospace,"SF Mono","Cascadia Code","Cascadia Mono",Consolas,monospace;}
+.shell{max-width:1180px;margin:0 auto;padding:0 22px;}
+header{padding:44px 0 26px;border-bottom:1px solid var(--border);}
+.eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);
+  font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:10px;}
+.eyebrow::before{content:"";width:26px;height:2px;background:var(--accent);display:inline-block;}
+h1{font-size:clamp(28px,4.2vw,44px);line-height:1.05;margin:0 0 12px;font-weight:760;
+  letter-spacing:-.02em;text-wrap:balance;max-width:16ch;}
+.lede{color:var(--muted);font-size:16px;max-width:64ch;margin:0;}
+.stats{display:flex;flex-wrap:wrap;gap:0;margin-top:26px;
+  border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--panel);}
+.stat{flex:1 1 140px;padding:14px 18px;border-right:1px solid var(--border2);}
+.stat:last-child{border-right:0}
+.stat .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em;}
+.stat .l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);margin-top:3px;}
+main{padding:30px 0 10px;}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;
+  box-shadow:var(--shadow);overflow:hidden;}
+.panel-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:16px 20px;border-bottom:1px solid var(--border2);flex-wrap:wrap;}
+.panel-h h2{margin:0;font-size:15px;font-weight:650;letter-spacing:-.01em;}
+.panel-h .hint{font-size:12px;color:var(--faint);}
+.mapwrap{position:relative;}
+#map{display:block;width:100%;height:560px;touch-action:none;}
+#legend{position:absolute;top:14px;right:14px;display:flex;flex-direction:column;gap:2px;
+  background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(6px);
+  border:1px solid var(--border);border-radius:10px;padding:8px;max-width:230px;}
+.leg{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;cursor:pointer;
+  font-size:11.5px;color:var(--muted);user-select:none;transition:background .12s;}
+.leg:hover{background:var(--border2);}
+.leg.off{opacity:.38;}
+.leg .sw{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.leg .lc{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--faint);}
+#tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;z-index:5;
+  background:var(--ink);color:var(--bg);padding:8px 11px;border-radius:8px;max-width:280px;
+  font-size:12.5px;line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.28);}
+#tip b{display:block;margin-bottom:3px;font-weight:600;}
+#tip .meta{opacity:.72;font-size:11px;}
+.section-h{margin:38px 0 4px;font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin:16px 0 10px;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;
+  border-top:3px solid var(--dot);}
+.card h3{margin:0 0 3px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  display:flex;align-items:center;gap:8px;}
+.card h3 .lc{margin-left:auto;font-variant-numeric:tabular-nums;}
+.card .kw{font-size:14px;color:var(--ink);font-weight:600;margin:0 0 11px;line-height:1.35;}
+.card ul{margin:0;padding:0;list-style:none;}
+.card li{margin:0;padding:7px 0;border-top:1px solid var(--border2);font-size:13px;}
+.card li:first-child{border-top:0;}
+.card a{color:var(--ink);text-decoration:none;display:block;}
+.card a:hover{color:var(--accent);}
+.card .src{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);margin-top:2px;}
+footer{border-top:1px solid var(--border);margin-top:34px;padding:22px 0 46px;
+  color:var(--faint);font-size:12.5px;line-height:1.7;}
+a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+@media (max-width:560px){#map{height:440px;}#legend{position:static;max-width:none;margin:10px;}}
+</style>
+
+<div class="shell">
+  <header>
+    <p class="eyebrow mono">Baltic Defence &amp; Geopolitics Monitor</p>
+    <h1>The week in Russia, Ukraine &amp; regional security news</h1>
+    <p class="lede">Every article the Baltic public broadcasters published on Ukraine, Russia,
+      defence, China, war and drones — embedded, clustered by theme, and mapped. Hover a point
+      for the headline; click to read the source.</p>
+    <div class="stats mono" id="stats"></div>
+  </header>
+  <main>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Topic map</h2>
+        <span class="hint mono">TF-IDF · LSA · t-SNE · KMeans — proximity ≈ shared language</span>
+      </div>
+      <div class="mapwrap">
+        <canvas id="map"></canvas>
+        <div id="legend" class="mono"></div>
+        <div id="tip"></div>
+      </div>
+    </section>
+    <p class="section-h">Clusters</p>
+    <section class="grid" id="cards"></section>
+  </main>
+  <footer class="mono">
+    Sources — ERR (Estonia), LRT (Lithuania), LSM (Latvia), English editions.<br>
+    Method — headlines filtered to defence/geopolitics themes, full article bodies fetched,
+    TF-IDF vectorised, reduced with TruncatedSVD (LSA), laid out with t-SNE, clustered with KMeans.
+    Cluster labels are each cluster's top mean-TF-IDF terms.
+  </footer>
+</div>
+
+<script>
+const D = {"generated": "2026-07-26 21:51 UTC", "sources": 3, "clusters": [{"id": 0, "label": "military, russia, russian, defense, added, air", "count": 26}, {"id": 1, "label": "pevkur, uk, estonia, defense, ammunition, hanno", "count": 5}, {"id": 2, "label": "border, migrants, guard, migration, border guard, eastern border", "count": 14}, {"id": 3, "label": "court, argue, atrocity, history, russia, courts", "count": 5}, {"id": 4, "label": "baltic, baltic states, airspace, latvia estonia, false, joint", "count": 4}, {"id": 5, "label": "defence, lithuania, political, lithuanian, russian, new", "count": 19}, {"id": 6, "label": "world, soviet, site, remains, memorial, exhumation", "count": 4}], "points": [{"x": 2.713, "y": 7.672, "c": 4, "h": "Russian disinformation surge may be connected to upcoming Baltic elections", "s": "ERR (Estonia)", "d": "2026-07-12", "u": "https://news.err.ee/1610075686/russian-disinformation-surge-may-be-connected-to-upcoming-baltic-elections"}, {"x": 1.019, "y": 4.866, "c": 0, "h": "Defense Intelligence: Russia may face air force fuel problems after Ukrainian strikes", "s": "ERR (Estonia)", "d": "2026-07-12", "u": "https://news.err.ee/1610074699/defense-intelligence-russia-may-face-air-force-fuel-problems-after-ukrainian-strikes"}, {"x": -3.626, "y": 1.25, "c": 0, "h": "Estonian government approves extending temporary protection of Ukrainian refugees", "s": "ERR (Estonia)", "d": "2026-07-12", "u": "https://news.err.ee/1610073646/estonian-government-approves-extending-temporary-protection-of-ukrainian-refugees"}, {"x": 3.85, "y": 7.306, "c": 4, "h": "Estonia joins other 2 Baltic states in protest over Russian airspace claims", "s": "ERR (Estonia)", "d": "2026-07-12", "u": "https://news.err.ee/1610075275/estonia-joins-other-2-baltic-states-in-protest-over-russian-airspace-claims"}, {"x": -3.439, "y": 7.345, "c": 5, "h": "TV thriller series being shot in Ukraine and Estonia", "s": "ERR (Estonia)", "d": "2026-07-13", "u": "https://news.err.ee/1610076331/tv-thriller-series-being-shot-in-ukraine-and-estonia"}, {"x": -4.631, "y": 5.632, "c": 0, "h": "Ukraine war drives nonmilitary women to join defense organization in Estonia", "s": "ERR (Estonia)", "d": "2026-07-13", "u": "https://news.err.ee/1610076253/ukraine-war-drives-nonmilitary-women-to-join-defense-organization-in-estonia"}, {"x": -0.892, "y": -2.44, "c": 2, "h": "Russia holds live-fire exercise on Lake Peipus without informing Estonia", "s": "ERR (Estonia)", "d": "2026-07-14", "u": "https://news.err.ee/1610076910/russia-holds-live-fire-exercise-on-lake-peipus-without-informing-estonia"}, {"x": -4.835, "y": 2.472, "c": 0, "h": "Just 1 in 3 conscripts accepted as armed forces take 'gap year'", "s": "ERR (Estonia)", "d": "2026-07-14", "u": "https://news.err.ee/1610077015/just-1-in-3-conscripts-accepted-as-armed-forces-take-gap-year"}, {"x": 1.282, "y": 0.085, "c": 1, "h": "Estonia–Ukraine drone deal implementation 'begins immediately'", "s": "ERR (Estonia)", "d": "2026-07-14", "u": "https://news.err.ee/1610077216/estonia-ukraine-drone-deal-implementation-begins-immediately"}, {"x": -3.238, "y": 8.776, "c": 3, "h": "Watch | Stefan Hedlund: You can't have a rational discourse with people who love Russia", "s": "ERR (Estonia)", "d": "2026-07-14", "u": "https://news.err.ee/1610077186/watch-stefan-hedlund-you-can-t-have-a-rational-discourse-with-people-who-love-russia"}, {"x": 1.392, "y": -7.514, "c": 3, "h": "Russia plans to take Baltics to International Court of Justice over alleged discrimination", "s": "ERR (Estonia)", "d": "2026-07-14", "u": "https://news.err.ee/1610077303/russia-plans-to-take-baltics-to-international-court-of-justice-over-alleged-discrimination"}, {"x": 0.134, "y": -3.8, "c": 2, "h": "Heavy rain slows work on Estonia's eastern border", "s": "ERR (Estonia)", "d": "2026-07-15", "u": "https://news.err.ee/1610077780/heavy-rain-slows-work-on-estonia-s-eastern-border"}, {"x": 10.073, "y": 1.403, "c": 1, "h": "US 'close' to resuming weapons deliveries, says Estonian ambassador", "s": "ERR (Estonia)", "d": "2026-07-15", "u": "https://news.err.ee/1610078008/us-close-to-resuming-weapons-deliveries-says-estonian-ambassador"}, {"x": -3.719, "y": -4.004, "c": 0, "h": "Estonian troops join Bastille Day parade in Paris", "s": "ERR (Estonia)", "d": "2026-07-15", "u": "https://news.err.ee/1610077843/estonian-troops-join-bastille-day-parade-in-paris"}, {"x": -5.42, "y": -1.696, "c": 2, "h": "Man carrying deactivated machine gun in Tallinn has weapon confiscated", "s": "ERR (Estonia)", "d": "2026-07-15", "u": "https://news.err.ee/1610077954/man-carrying-deactivated-machine-gun-in-tallinn-has-weapon-confiscated"}, {"x": 0.718, "y": -1.494, "c": 2, "h": "Prime minister: Estonia can fund defense and still cut spending", "s": "ERR (Estonia)", "d": "2026-07-16", "u": "https://news.err.ee/1610078884/prime-minister-estonia-can-fund-defense-and-still-cut-spending"}, {"x": 10.073, "y": 1.403, "c": 1, "h": "US 'close' to resuming weapons deliveries, says Estonian officials", "s": "ERR (Estonia)", "d": "2026-07-16", "u": "https://news.err.ee/1610078008/us-close-to-resuming-weapons-deliveries-says-estonian-officials"}, {"x": 6.343, "y": -0.419, "c": 1, "h": "UK to deploy more soldiers and preposition ammunition in Estonia", "s": "ERR (Estonia)", "d": "2026-07-17", "u": "https://news.err.ee/1610079607/uk-to-deploy-more-soldiers-and-preposition-ammunition-in-estonia"}, {"x": 0.791, "y": 4.954, "c": 0, "h": "Russia's fuel shortages could lead to more repressions, says Estonian intel", "s": "ERR (Estonia)", "d": "2026-07-17", "u": "https://news.err.ee/1610079931/russia-s-fuel-shortages-could-lead-to-more-repressions-says-estonian-intel"}, {"x": -2.004, "y": -6.484, "c": 6, "h": "Russia protests removal of Valga County Soviet war memorial", "s": "ERR (Estonia)", "d": "2026-07-18", "u": "https://news.err.ee/1610080546/russia-protests-removal-of-valga-county-soviet-war-memorial"}, {"x": 6.485, "y": 2.932, "c": 0, "h": "Russia bans all commercial freight transport by Estonia-registered trucks", "s": "ERR (Estonia)", "d": "2026-07-18", "u": "https://news.err.ee/1610080570/russia-bans-all-commercial-freight-transport-by-estonia-registered-trucks"}, {"x": -0.566, "y": -2.725, "c": 0, "h": "Drone‑defense system on Estonia's eastern border still in early development", "s": "ERR (Estonia)", "d": "2026-07-20", "u": "https://news.err.ee/1610081377/drone-defense-system-on-estonia-s-eastern-border-still-in-early-development"}, {"x": -1.488, "y": -3.859, "c": 6, "h": "Estonian hunters deploy drones to keep African swine fever from farms", "s": "ERR (Estonia)", "d": "2026-07-20", "u": "https://news.err.ee/1610081455/estonian-hunters-deploy-drones-to-keep-african-swine-fever-from-farms"}, {"x": -4.869, "y": -6.515, "c": 0, "h": "Gallery: Wagner's 'Das Rheingold' staged in full for first time at Saaremaa Opera Days", "s": "ERR (Estonia)", "d": "2026-07-20", "u": "https://news.err.ee/1610081461/gallery-wagner-s-das-rheingold-staged-in-full-for-first-time-at-saaremaa-opera-days"}, {"x": 2.509, "y": -1.514, "c": 0, "h": "Veteran diplomat: NATO's deterrence is meant to work primarily in Putin's mind", "s": "ERR (Estonia)", "d": "2026-07-20", "u": "https://news.err.ee/1610081596/veteran-diplomat-nato-s-deterrence-is-meant-to-work-primarily-in-putin-s-mind"}, {"x": -1.045, "y": -0.484, "c": 2, "h": "Minister: Closure of Estonia's border with Russia depends on threat assessment", "s": "ERR (Estonia)", "d": "2026-07-20", "u": "https://news.err.ee/1610081680/minister-closure-of-estonia-s-border-with-russia-depends-on-threat-assessment"}, {"x": -8.333, "y": -2.484, "c": 0, "h": "Estonian expert: Larger Middle East war likely", "s": "ERR (Estonia)", "d": "2026-07-21", "u": "https://news.err.ee/1610082355/estonian-expert-larger-middle-east-war-likely"}, {"x": -2.759, "y": -1.129, "c": 5, "h": "Foreign Ministry's Ukraine bureau chief: Ukraine's soldiers can't afford to be shaken by political upheaval", "s": "ERR (Estonia)", "d": "2026-07-21", "u": "https://news.err.ee/1610082268/foreign-ministry-s-ukraine-bureau-chief-ukraine-s-soldiers-can-t-afford-to-be-shaken-by-political-upheaval"}, {"x": -0.382, "y": 7.628, "c": 5, "h": "Turkish Airlines suspected of using Russian airspace on flight from Tallinn", "s": "ERR (Estonia)", "d": "2026-07-21", "u": "https://news.err.ee/1610082736/turkish-airlines-suspected-of-using-russian-airspace-on-flight-from-tallinn"}, {"x": -2.948, "y": -1.4, "c": 5, "h": "Expert: Ukraine's defense changes unlikely to have a 'direct' impact on battlefield", "s": "ERR (Estonia)", "d": "2026-07-22", "u": "https://news.err.ee/1610083501/expert-ukraine-s-defense-changes-unlikely-to-have-a-direct-impact-on-battlefield"}, {"x": 2.583, "y": 1.973, "c": 0, "h": "Bank of Estonia expert: Russia's economy is approaching stagnation", "s": "ERR (Estonia)", "d": "2026-07-23", "u": "https://news.err.ee/1610084782/bank-of-estonia-expert-russia-s-economy-is-approaching-stagnation"}, {"x": -0.462, "y": 3.515, "c": 0, "h": "Critics claim anti-Russian messaging in Estonian meat advertisement", "s": "ERR (Estonia)", "d": "2026-07-23", "u": "https://news.err.ee/1610084398/critics-claim-anti-russian-messaging-in-estonian-meat-advertisement"}, {"x": 2.117, "y": 3.37, "c": 5, "h": "OTP Bank makes boldest dreams in Russia come true", "s": "ERR (Estonia)", "d": "2026-07-23", "u": "https://news.err.ee/1610084590/otp-bank-makes-boldest-dreams-in-russia-come-true"}, {"x": -2.247, "y": 3.489, "c": 3, "h": "Pärnu Defense Industrial Park litigation drags on due to noise complaints", "s": "ERR (Estonia)", "d": "2026-07-23", "u": "https://news.err.ee/1610084779/parnu-defense-industrial-park-litigation-drags-on-due-to-noise-complaints"}, {"x": 0.638, "y": 6.565, "c": 0, "h": "Russia orders Yandex Maps to blur military and strategic sites near Estonia's border", "s": "ERR (Estonia)", "d": "2026-07-24", "u": "https://news.err.ee/1610085589/russia-orders-yandex-maps-to-blur-military-and-strategic-sites-near-estonia-s-border"}, {"x": -5.196, "y": 0.067, "c": 2, "h": "32 migrants arrested in Estonia linked to Latvia-Belarus migration pressure", "s": "ERR (Estonia)", "d": "2026-07-24", "u": "https://news.err.ee/1610085658/32-migrants-arrested-in-estonia-linked-to-latvia-belarus-migration-pressure"}, {"x": -8.327, "y": 4.599, "c": 2, "h": "Estonian citizen in US pleads guilty to procuring electronics for Russia", "s": "ERR (Estonia)", "d": "2026-07-24", "u": "https://news.err.ee/1610085871/estonian-citizen-in-us-pleads-guilty-to-procuring-electronics-for-russia"}, {"x": 1.656, "y": 3.526, "c": 0, "h": "Defense Intelligence: Strikes on online retail hubs add economic pressure on Russia", "s": "ERR (Estonia)", "d": "2026-07-24", "u": "https://news.err.ee/1610085697/defense-intelligence-strikes-on-online-retail-hubs-add-economic-pressure-on-russia"}, {"x": -6.124, "y": 6.91, "c": 6, "h": "Katrina Lehis loses to Russian fencer at world championships", "s": "ERR (Estonia)", "d": "2026-07-25", "u": "https://news.err.ee/1610086312/katrina-lehis-loses-to-russian-fencer-at-world-championships"}, {"x": -6.13, "y": -4.267, "c": 5, "h": "Open Narva Days offer peek into lesser-known sides of Estonian border city", "s": "ERR (Estonia)", "d": "2026-07-25", "u": "https://news.err.ee/1610085874/open-narva-days-offer-peek-into-lesser-known-sides-of-estonian-border-city"}, {"x": 5.52, "y": 5.301, "c": 5, "h": "Estonia and other Baltic states, Ukraine slam IOC decision on Russian athletes", "s": "ERR (Estonia)", "d": "2026-07-25", "u": "https://news.err.ee/1610086249/estonia-and-other-baltic-states-ukraine-slam-ioc-decision-on-russian-athletes"}, {"x": -4.183, "y": 4.161, "c": 3, "h": "Ministries oppose Riigikogu members' special military court bill", "s": "ERR (Estonia)", "d": "2026-07-25", "u": "https://news.err.ee/1610086300/ministries-oppose-riigikogu-members-special-military-court-bill"}, {"x": -4.307, "y": 3.819, "c": 0, "h": "Ministry of Defense opposed to restoring special pensions for EDF personnel", "s": "ERR (Estonia)", "d": "2026-07-26", "u": "https://news.err.ee/1610086414/ministry-of-defense-opposed-to-restoring-special-pensions-for-edf-personnel"}, {"x": -5.107, "y": 0.08, "c": 2, "h": "Border authorities apprehend illegal migrants in Estonia for 4th day in a row", "s": "ERR (Estonia)", "d": "2026-07-26", "u": "https://news.err.ee/1610086741/border-authorities-apprehend-illegal-migrants-in-estonia-for-4th-day-in-a-row"}, {"x": 2.085, "y": -4.223, "c": 5, "h": "Civic initiative turns old phones into drone detectors as Lithuania fixates on air defence", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2989283/civic-initiative-turns-old-phones-into-drone-detectors-as-lithuania-fixates-on-air-defence"}, {"x": 6.803, "y": -3.905, "c": 0, "h": "German brigade troops to arrive at Lithuanias Rūdninkai base this autumn, minister says", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2993182/german-brigade-troops-to-arrive-at-lithuania-s-rudninkai-base-this-autumn-minister-says"}, {"x": -2.001, "y": -6.578, "c": 6, "h": "Exhumation of Soviet soldiersâ remains begins in Lithuaniaâs Vievis", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2993063/exhumation-of-soviet-soldiers-remains-begins-in-lithuania-s-vievis"}, {"x": 6.824, "y": -3.904, "c": 0, "h": "Lithuania begins construction of second phase of military base for German brigade", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2993047/lithuania-begins-construction-of-second-phase-of-military-base-for-german-brigade"}, {"x": -1.785, "y": 5.859, "c": 5, "h": "LRT English Newsletter: Russia planning something?", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2992334/lrt-english-newsletter-russia-planning-something"}, {"x": -1.566, "y": 1.785, "c": 2, "h": "New minister says border guards should be allowed to use firearms against migrants", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2992108/new-minister-says-border-guards-should-be-allowed-to-use-firearms-against-migrants"}, {"x": 3.098, "y": -2.941, "c": 0, "h": "Latvia to donate radars to Lithuania to strengthen air defences", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2992294/latvia-to-donate-radars-to-lithuania-to-strengthen-air-defences"}, {"x": -1.859, "y": 5.744, "c": 5, "h": "EU court dismisses final challenge to sanctions on Belarusian transit through Lithuania", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2992211/eu-court-dismisses-final-challenge-to-sanctions-on-belarusian-transit-through-lithuania"}, {"x": 4.335, "y": 6.375, "c": 4, "h": "Baltic states reject Russian claims over airspace in joint diplomatic protest", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2989137/baltic-states-reject-russian-claims-over-airspace-in-joint-diplomatic-protest"}, {"x": -1.954, "y": 1.342, "c": 2, "h": "Lithuania sends more guards to Latvia as minister raises prospect of border checks", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2989093/lithuania-sends-more-guards-to-latvia-as-minister-raises-prospect-of-border-checks"}, {"x": 3.069, "y": -2.251, "c": 5, "h": "NATO air defence pledge for Baltics: promises and reality", "s": "LRT (Lithuania)", "d": "2026-07-19", "u": "https://www.lrt.lt/en/news-in-english/19/2989202/nato-air-defence-pledge-for-baltics-promises-and-reality"}, {"x": 4.365, "y": -5.989, "c": 5, "h": "Most Poles oppose return of compulsory military service", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/2997350/most-poles-oppose-return-of-compulsory-military-service"}, {"x": -7.039, "y": 3.332, "c": 5, "h": "Belarusian man says asylum in Lithuania endangered by politics. History shows otherwise", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/2998303/belarusian-man-says-asylum-in-lithuania-endangered-by-politics-history-shows-otherwise"}, {"x": 4.136, "y": 3.253, "c": 5, "h": "Store chain closing in Lithuania as its owner falls under latest Russia sanctions", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/3000267/store-chain-closing-in-lithuania-as-its-owner-falls-under-latest-russia-sanctions"}, {"x": 3.05, "y": -0.135, "c": 5, "h": "Lithuaniaâs auditor general suggests fixing military spending above 5% beyond 2030", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/3000197/lithuania-s-auditor-general-suggests-fixing-military-spending-above-5-beyond-2030"}, {"x": -7.378, "y": 3.56, "c": 5, "h": "Lithuania investigates citizen on suspicion of spying for Russia", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/3000153/lithuania-investigates-citizen-on-suspicion-of-spying-for-russia"}, {"x": 4.38, "y": -2.097, "c": 5, "h": "Lithuania weighs joining new international defence financing initiatives â minister", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/3000095/lithuania-weighs-joining-new-international-defence-financing-initiatives-minister"}, {"x": 4.591, "y": 2.348, "c": 0, "h": "Lithuanian FM slams concessions in latest Russia sanctions round", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/3000051/lithuanian-fm-slams-concessions-in-latest-russia-sanctions-round"}, {"x": -3.244, "y": -1.885, "c": 5, "h": "Former Lithuanian army chief warns Ukraine leadership changes risk military instability", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/2999178/former-lithuanian-army-chief-warns-ukraine-leadership-changes-risk-military-instability"}, {"x": -2.379, "y": 1.355, "c": 2, "h": "Lithuanian, Polish border officials to discuss easing checks amid temporary controls", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/2999139/lithuanian-polish-border-officials-to-discuss-easing-checks-amid-temporary-controls"}, {"x": 6.305, "y": -0.452, "c": 1, "h": "UK swaps tanks for drones in the Baltics: âThe way of war is changingâ", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/2998285/uk-swaps-tanks-for-drones-in-the-baltics-the-way-of-war-is-changing"}, {"x": 4.663, "y": 1.995, "c": 0, "h": "âFatigue in Europeâ: Lithuania among few fighting for Russia sanctions", "s": "LRT (Lithuania)", "d": "2026-07-26", "u": "https://www.lrt.lt/en/news-in-english/19/2997319/fatigue-in-europe-lithuania-among-few-fighting-for-russia-sanctions"}, {"x": -5.649, "y": -3.951, "c": 2, "h": "The Deep Roots of Resilience: what a crown taught me about today’s Ukraine", "s": "LSM (Latvia)", "d": "2026-07-12", "u": "https://eng.lsm.lv/article/features/features/12.07.2026-the-deep-roots-of-resilience-what-a-crown-taught-me-about-todays-ukraine.a654669/"}, {"x": 4.243, "y": 7.155, "c": 4, "h": "Baltic states 'strongly reject' Russian lies in Moscow", "s": "LSM (Latvia)", "d": "2026-07-12", "u": "https://eng.lsm.lv/article/politics/diplomacy/11.07.2026-baltic-states-strongly-reject-russian-lies-in-moscow.a654710/"}, {"x": 2.823, "y": 5.635, "c": 0, "h": "Russia indulges in further Baltic deportation fantasies", "s": "LSM (Latvia)", "d": "2026-07-12", "u": "https://eng.lsm.lv/article/politics/diplomacy/08.07.2026-russia-indulges-in-further-baltic-deportation-fantasies.a654280/"}, {"x": 0.346, "y": 9.882, "c": 0, "h": "'Lion's Leap' military exercises taking place this weekend", "s": "LSM (Latvia)", "d": "2026-07-12", "u": "https://eng.lsm.lv/article/society/defence/10.07.2026-lions-leap-military-exercises-taking-place-this-weekend.a654614/"}, {"x": -0.373, "y": 0.526, "c": 2, "h": "Latvia is Belarus' first target for hybrid war: Border Guard chief", "s": "LSM (Latvia)", "d": "2026-07-12", "u": "https://eng.lsm.lv/article/society/defence/10.07.2026-latvia-is-belarus-first-target-for-hybrid-war-border-guard-chief.a654588/"}, {"x": 0.407, "y": 1.96, "c": 0, "h": "No-one in armed forces will be disciplined over Rēzekne drone incident", "s": "LSM (Latvia)", "d": "2026-07-19", "u": "https://eng.lsm.lv/article/society/defence/19.07.2026-no-one-in-armed-forces-will-be-disciplined-over-rezekne-drone-incident.a655536/"}, {"x": -7.839, "y": 0.059, "c": 5, "h": "Latvia's honorary consuls in Ukraine given awards", "s": "LSM (Latvia)", "d": "2026-07-19", "u": "https://eng.lsm.lv/article/politics/diplomacy/14.07.2026-latvias-honorary-consuls-in-ukraine-given-awards.a654960/"}, {"x": 1.391, "y": -7.539, "c": 3, "h": "Russia planning to make sarcastic use of international courts against Baltics", "s": "LSM (Latvia)", "d": "2026-07-19", "u": "https://eng.lsm.lv/article/politics/diplomacy/13.07.2026-russia-planning-to-make-sarcastic-use-of-international-courts-against-baltics.a654903/"}, {"x": -7.866, "y": 0.328, "c": 0, "h": "Latvian honorary consulate building in Sloviansk destroyed by Russian strike", "s": "LSM (Latvia)", "d": "2026-07-26", "u": "https://eng.lsm.lv/article/politics/diplomacy/24.07.2026-latvian-honorary-consulate-building-in-sloviansk-destroyed-by-russian-strike.a656267/"}, {"x": -8.615, "y": 1.686, "c": 2, "h": "State Security Service investigates fire at Ukrainian charity warehouse", "s": "LSM (Latvia)", "d": "2026-07-26", "u": "https://eng.lsm.lv/article/society/crime/24.07.2026-state-security-service-investigates-fire-at-ukrainian-charity-warehouse.a656192/"}, {"x": 0.79, "y": 0.54, "c": 0, "h": "Latvia and American company plan artillery factory within 2 years", "s": "LSM (Latvia)", "d": "2026-07-26", "u": "https://eng.lsm.lv/article/society/defence/24.07.2026-latvia-and-american-company-plan-artillery-factory-within-2-years.a656200/"}], "colors": ["#4f8cff", "#2bb8a3", "#e0a13a", "#a781f5", "#f0688a", "#6fbf3f", "#ff7a45", "#00b8d9", "#c026d3"]};
+const C = D.colors, cvs = document.getElementById('map'), ctx = cvs.getContext('2d');
+const tip = document.getElementById('tip'), wrap = cvs.parentElement;
+const hidden = new Set();
+let pts = [], hover = -1, anim = 1;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// header stats
+document.getElementById('stats').innerHTML = [
+  [D.points.length,'Articles'], [D.sources,'Sources'],
+  [D.clusters.length,'Clusters'], [D.generated,'Updated']
+].map(s=>`<div class="stat"><div class="n">${s[0]}</div><div class="l">${s[1]}</div></div>`).join('');
+
+// legend
+const leg = document.getElementById('legend');
+leg.innerHTML = D.clusters.map(c=>{
+  const kw = c.label.split(', ').slice(0,3).join(' · ');
+  return `<div class="leg" data-c="${c.id}" tabindex="0"><span class="sw" style="background:${C[c.id%C.length]}"></span>${kw}<span class="lc">${c.count}</span></div>`;
+}).join('');
+leg.querySelectorAll('.leg').forEach(el=>{
+  const toggle=()=>{const id=+el.dataset.c; hidden.has(id)?hidden.delete(id):hidden.add(id);
+    el.classList.toggle('off'); draw();};
+  el.onclick=toggle;
+  el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
+});
+
+// cluster cards
+document.getElementById('cards').innerHTML = D.clusters.map(c=>{
+  const arts = D.points.filter(p=>p.c===c.id);
+  const col = C[c.id%C.length];
+  const li = arts.map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
+  const kw = c.label.split(', ').slice(0,4).join(', ');
+  return `<div class="card" style="--dot:${col}"><h3><span class="sw" style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>Cluster ${c.id}<span class="lc">${c.count}</span></h3><p class="kw">${kw}</p><ul>${li}</ul></div>`;
+}).join('');
+
+// bounds
+const xs=D.points.map(p=>p.x), ys=D.points.map(p=>p.y);
+let minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+const px=(maxX-minX)*0.08||1, py=(maxY-minY)*0.08||1;
+minX-=px;maxX+=px;minY-=py;maxY+=py;
+
+function layout(){
+  const dpr=devicePixelRatio||1, w=wrap.clientWidth, h=cvs.clientHeight;
+  cvs.width=w*dpr; cvs.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  const pad=34;
+  pts=D.points.map(p=>({
+    ...p,
+    sx:pad+(p.x-minX)/(maxX-minX)*(w-2*pad),
+    sy:pad+(maxY-p.y)/(maxY-minY)*(h-2*pad)
+  }));
+}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function draw(){
+  const w=wrap.clientWidth,h=cvs.clientHeight;
+  ctx.clearRect(0,0,w,h);
+  // faint grid
+  ctx.strokeStyle=css('--grid');ctx.lineWidth=1;
+  for(let i=1;i<6;i++){const gx=i/6*w;ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();
+    const gy=i/6*h;ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
+  const ground=css('--panel');
+  pts.forEach((p,i)=>{
+    if(hidden.has(p.c))return;
+    const r=(i===hover?8:5.5)*anim;
+    ctx.beginPath();ctx.arc(p.sx,p.sy,r,0,7);
+    ctx.fillStyle=C[p.c%C.length];ctx.globalAlpha=i===hover?1:0.9;ctx.fill();
+    ctx.globalAlpha=1;ctx.lineWidth=i===hover?2:1.2;ctx.strokeStyle=ground;ctx.stroke();
+    if(i===hover){ctx.beginPath();ctx.arc(p.sx,p.sy,r+4,0,7);
+      ctx.strokeStyle=C[p.c%C.length];ctx.globalAlpha=.4;ctx.lineWidth=1.5;ctx.stroke();ctx.globalAlpha=1;}
+  });
+}
+function nearest(mx,my){
+  let best=-1,bd=169;
+  pts.forEach((p,i)=>{if(hidden.has(p.c))return;
+    const d=(p.sx-mx)**2+(p.sy-my)**2;if(d<bd){bd=d;best=i;}});
+  return best;
+}
+cvs.addEventListener('mousemove',e=>{
+  const rc=cvs.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
+  const h=nearest(mx,my);
+  if(h!==hover){hover=h;draw();}
+  if(h>=0){const p=pts[h];cvs.style.cursor='pointer';
+    tip.innerHTML=`<b>${p.h}</b><span class="meta">${p.s} · ${p.d}</span>`;
+    tip.style.opacity=1;
+    let tx=mx+16,ty=my+16;
+    if(tx+tip.offsetWidth>wrap.clientWidth)tx=mx-tip.offsetWidth-16;
+    if(ty+tip.offsetHeight>cvs.clientHeight)ty=my-tip.offsetHeight-16;
+    tip.style.left=tx+'px';tip.style.top=ty+'px';
+  }else{cvs.style.cursor='default';tip.style.opacity=0;}
+});
+cvs.addEventListener('mouseleave',()=>{hover=-1;tip.style.opacity=0;draw();});
+cvs.addEventListener('click',()=>{if(hover>=0)window.open(pts[hover].u,'_blank','noopener');});
+new ResizeObserver(()=>{layout();draw();}).observe(wrap);
+layout();
+if(reduce){anim=1;draw();}
+else{anim=0;const t0=performance.now();
+  (function run(t){anim=Math.min(1,(t-t0)/500);draw();if(anim<1)requestAnimationFrame(run);})(t0);}
+// redraw on theme toggle
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);
+</script></body></html>
