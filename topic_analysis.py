@@ -508,9 +508,9 @@ BODY = """
 <div class="shell">
   <header>
     <p class="eyebrow mono">Baltic Defence &amp; Geopolitics Monitor</p>
-    <h1>The week in Russia, Ukraine &amp; regional security news</h1>
-    <p class="lede">How much of the Baltic public broadcasters' news is about defence and security —
-      and what is it actually about? First the numbers by country, then the themes: every matching
+    <h1>What do Baltic defence news look like?</h1>
+    <p class="lede">How much of the Baltic public broadcasters' news is about defence and security,
+    and what is it actually about? First the numbers by country, then the themes: every matching
       article embedded, coloured by topic and mapped by shared language.</p>
     <div class="stats mono" id="stats"></div>
   </header>
