@@ -2,23 +2,27 @@
 :root{
   --bg:#e7d5b3; --panel:#f6ecd2; --ink:#2b140f; --muted:#6d4634; --faint:#9c7a5a;
   --border:#c1972f; --border2:#e2cd9c; --accent:#a52f1d; --gold:#bd8322; --green:#3c7a4e;
+  --indigo:#2f4b7c; --indigo2:#213b6b;
   --grid:#d7bf8f; --shadow:0 2px 4px rgba(70,35,15,.12),0 16px 36px rgba(70,35,15,.18);
 }
 @media (prefers-color-scheme:dark){
   :root{
     --bg:#180c0a; --panel:#26130d; --ink:#f4e7cd; --muted:#c6a986; --faint:#8c7455;
     --border:#84591f; --border2:#3a2315; --accent:#e8614a; --gold:#e6ad4c; --green:#5fb17b;
+  --indigo:#8ea9dd; --indigo2:#a9c0ec;
     --grid:#35221a; --shadow:0 2px 6px rgba(0,0,0,.5),0 18px 44px rgba(0,0,0,.62);
   }
 }
 :root[data-theme=light]{
   --bg:#e7d5b3; --panel:#f6ecd2; --ink:#2b140f; --muted:#6d4634; --faint:#9c7a5a;
   --border:#c1972f; --border2:#e2cd9c; --accent:#a52f1d; --gold:#bd8322; --green:#3c7a4e;
+  --indigo:#2f4b7c; --indigo2:#213b6b;
   --grid:#d7bf8f; --shadow:0 2px 4px rgba(70,35,15,.12),0 16px 36px rgba(70,35,15,.18);
 }
 :root[data-theme=dark]{
   --bg:#180c0a; --panel:#26130d; --ink:#f4e7cd; --muted:#c6a986; --faint:#8c7455;
   --border:#84591f; --border2:#3a2315; --accent:#e8614a; --gold:#e6ad4c; --green:#5fb17b;
+  --indigo:#8ea9dd; --indigo2:#a9c0ec;
   --grid:#35221a; --shadow:0 2px 6px rgba(0,0,0,.5),0 18px 44px rgba(0,0,0,.62);
 }
 *{box-sizing:border-box}
@@ -32,25 +36,29 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;
           mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;}
 .shell{max-width:1180px;margin:0 auto;padding:0 22px;position:relative;z-index:1;}
-header{margin:24px 0 0;padding:42px 36px 30px;border:3px solid var(--gold);border-radius:9px;
-  background:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='48'%20height='48'%3E%3Cg%20fill='none'%20stroke='%23fdf3e0'%20stroke-opacity='0.20'%20stroke-width='1.2'%3E%3Cpath%20d='M24%206L42%2024L24%2042L6%2024Z'/%3E%3Crect%20x='12'%20y='12'%20width='24'%20height='24'/%3E%3C/g%3E%3Cg%20fill='%23fdf3e0'%20fill-opacity='0.18'%3E%3Ccircle%20cx='24'%20cy='24'%20r='1.6'/%3E%3Ccircle%20cx='0'%20cy='0'%20r='1.6'/%3E%3Ccircle%20cx='48'%20cy='0'%20r='1.6'/%3E%3Ccircle%20cx='0'%20cy='48'%20r='1.6'/%3E%3Ccircle%20cx='48'%20cy='48'%20r='1.6'/%3E%3C/g%3E%3C/svg%3E") repeat,
-    linear-gradient(150deg,#7a2618 0%,#5a1c11 55%,#45150d 100%);
-  color:#fdf3e0;box-shadow:var(--shadow),inset 0 0 0 1px rgba(0,0,0,.22);position:relative;overflow:hidden;}
+header{margin:24px 0 0;padding:40px 40px 30px;border:3px solid var(--gold);border-radius:9px;
+  background:var(--panel);color:var(--ink);position:relative;overflow:hidden;
+  box-shadow:var(--shadow);outline:2px solid var(--accent);outline-offset:3px;}
+/* restrained gold "josta" diamond weave — a subtle texture woven into the paper, not a loud net */
+header::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.07;
+  background:var(--gold);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;
+          mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;}
+header>*{position:relative;z-index:1;}
 .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:11px;letter-spacing:.2em;
   text-transform:uppercase;color:#3a140e;background:var(--gold);font-weight:800;
-  padding:7px 14px;border-radius:3px;margin:0 0 22px;box-shadow:0 3px 0 rgba(0,0,0,.28);}
-.eyebrow::before{content:"\2734";font-size:13px;line-height:1;color:#8f2417;display:inline-block;}
+  padding:7px 14px;border-radius:3px;margin:0 0 22px;box-shadow:0 2px 5px rgba(70,35,15,.20);}
+.eyebrow::before{content:"\2734";font-size:13px;line-height:1;color:#243a63;display:inline-block;}
 h1{font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
-  font-size:clamp(38px,5.8vw,64px);line-height:1.0;margin:0 0 16px;font-weight:700;
-  letter-spacing:-.02em;text-wrap:balance;max-width:15ch;color:#fdf3e0;
-  text-shadow:0 2px 10px rgba(0,0,0,.3);}
-.lede{color:rgba(253,243,224,.84);font-size:16.5px;max-width:60ch;margin:0;}
+  font-size:clamp(34px,4.8vw,52px);line-height:1.06;margin:0 0 16px;font-weight:700;
+  letter-spacing:-.02em;text-wrap:balance;color:var(--ink);}
+.lede{color:var(--muted);font-size:16.5px;max-width:none;margin:0;}
 .stats{display:flex;flex-wrap:wrap;gap:0;margin-top:30px;
-  border:none;border-top:2px solid rgba(255,236,210,.32);border-radius:0;overflow:visible;background:transparent;}
-.stat{flex:1 1 140px;padding:16px 18px 2px;border-right:1px solid rgba(255,236,210,.18);}
+  border:none;border-top:2px solid var(--border2);border-radius:0;overflow:visible;background:transparent;}
+.stat{flex:1 1 140px;padding:16px 18px 2px;border-right:1px solid var(--border2);}
 .stat:last-child{border-right:0}
-.stat .n{font-size:29px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--gold);}
-.stat .l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(253,243,224,.66);margin-top:3px;}
+.stat .n{font-size:29px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--accent);}
+.stat .l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-top:3px;}
 main{padding:30px 0 10px;}
 .panel{background:var(--panel);border:3px solid var(--gold);border-radius:6px;
   box-shadow:var(--shadow);overflow:hidden;outline:2px solid var(--accent);outline-offset:3px;
@@ -124,9 +132,14 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
   background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 20%,var(--panel)),var(--accent));}
 .section-num{color:var(--accent);font-weight:700;margin-right:2px;}
 /* Baltic woven ornament band (diamond + cross "josta" motif), tinted via CSS mask */
-.weave{height:16px;background:var(--accent);opacity:.9;
-  -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='32'%20height='16'%3E%3Cpath%20d='M16%201L32%208L16%2015L0%208Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.6'/%3E%3Cpath%20d='M16%205V11M13%208H19'%20stroke='%23000'%20stroke-width='1.5'/%3E%3C/svg%3E") repeat-x center/auto 16px;
-          mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='32'%20height='16'%3E%3Cpath%20d='M16%201L32%208L16%2015L0%208Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.6'/%3E%3Cpath%20d='M16%205V11M13%208H19'%20stroke='%23000'%20stroke-width='1.5'/%3E%3C/svg%3E") repeat-x center/auto 16px;}
+/* Baltic "josta" woven band: madder-red diamonds + inner cross, with indigo seam
+   diamonds threaded between them (two traditional dye colours, tinted via CSS mask). */
+.weave{height:20px;background:var(--accent);opacity:.95;position:relative;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='40'%20height='20'%3E%3Cg%20fill='none'%20stroke='%23000'%20stroke-width='1.5'%3E%3Cpath%20d='M20%201.5L38.5%2010L20%2018.5L1.5%2010Z'/%3E%3Cpath%20d='M20%205.5V14.5M14.5%2010H25.5'/%3E%3Cpath%20d='M0%2010L6%204M0%2010L6%2016M40%2010L34%204M40%2010L34%2016'/%3E%3C/g%3E%3Ccircle%20cx='20'%20cy='10'%20r='1.3'%20fill='%23000'/%3E%3C/svg%3E") repeat-x center/auto 20px;
+          mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='40'%20height='20'%3E%3Cg%20fill='none'%20stroke='%23000'%20stroke-width='1.5'%3E%3Cpath%20d='M20%201.5L38.5%2010L20%2018.5L1.5%2010Z'/%3E%3Cpath%20d='M20%205.5V14.5M14.5%2010H25.5'/%3E%3Cpath%20d='M0%2010L6%204M0%2010L6%2016M40%2010L34%204M40%2010L34%2016'/%3E%3C/g%3E%3Ccircle%20cx='20'%20cy='10'%20r='1.3'%20fill='%23000'/%3E%3C/svg%3E") repeat-x center/auto 20px;}
+.weave::before{content:"";position:absolute;inset:0;background:var(--indigo);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='40'%20height='20'%3E%3Cg%20fill='%23000'%3E%3Cpath%20d='M0%206L4%2010L0%2014L-4%2010Z'/%3E%3Cpath%20d='M40%206L44%2010L40%2014L36%2010Z'/%3E%3C/g%3E%3C/svg%3E") repeat-x center/auto 20px;
+          mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='40'%20height='20'%3E%3Cg%20fill='%23000'%3E%3Cpath%20d='M0%206L4%2010L0%2014L-4%2010Z'/%3E%3Cpath%20d='M40%206L44%2010L40%2014L36%2010Z'/%3E%3C/g%3E%3C/svg%3E") repeat-x center/auto 20px;}
 .header-weave{margin:22px 0 4px;padding:7px 0;border-top:2px solid var(--gold);border-bottom:2px solid var(--gold);}
 .footer-weave{margin:10px 0 24px;padding:7px 0;border-top:2px solid var(--gold);border-bottom:2px solid var(--gold);}
 /* legend: stacked name + date span, right-aligned numbers */
@@ -141,7 +154,7 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
 .cov b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;}
 .cov .star{color:var(--accent);}
 /* small honesty caveat note */
-.note{max-width:64ch;margin:2px 0 0;font-size:12.5px;color:var(--faint);line-height:1.5;}
+.note{max-width:none;margin:2px 0 0;font-size:12.5px;color:var(--faint);line-height:1.5;}
 .note b{color:var(--muted);font-weight:600;}
 /* collapsible theme cards — article list revealed on select */
 .card-h{cursor:pointer;user-select:none;}
@@ -212,7 +225,7 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
     <section class="panel">
       <div class="panel-h">
         <h2>Topic map</h2>
-        <span class="hint mono">near = similar wording · colour &amp; label = theme</span>
+        <span class="hint mono">near = similar wording · colour = theme (see legend)</span>
       </div>
       <div class="mapwrap">
         <canvas id="map"></canvas>
@@ -227,18 +240,20 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
     <section class="panel">
       <div class="panel-h">
         <h2>Most frequent terms</h2>
-        <span class="hint mono">articles mentioning each word · click a word to list them</span>
+        <span class="hint mono">counted across article titles · a title recurs under each frequent word it uses · click to list</span>
       </div>
       <div class="freq" id="freq"></div>
     </section>
   </main>
   <div class="weave footer-weave" aria-hidden="true"></div>
   <footer class="mono">
-    Sources — ERR (Estonia), LRT (Lithuania), LSM (Latvia), English editions.<br>
-    Method — headlines filtered to defence/geopolitics themes, full article bodies fetched,
+    Sources: ERR (Estonia), LRT (Lithuania), LSM (Latvia), English editions.<br>
+    Method: headlines filtered to defence/geopolitics themes, full article bodies fetched,
     TF-IDF vectorised, reduced with TruncatedSVD (LSA) and laid out with t-SNE so nearby dots
-    share wording. Each article is coloured by the theme its keywords match most; theme labels
-    sit on the map. Keyword lists are each theme's top mean-TF-IDF terms.
+    share wording. Each article is coloured by the theme its keywords match most (read the legend);
+    hover a dot for its headline. The most frequent terms are tallied across the article titles:
+    with common English stopwords and the Baltic countries' own names and capitals removed, so only
+    the distinctive words surface; word variants (russia/russian, drone/drones) count as one.
   </footer>
 </div>
 
@@ -248,8 +263,7 @@ const D = {"generated": "2026-08-09 20:22 UTC", "sources": 3, "themes": [{"id": 
 // ---- act 1: Baltic defence-share choropleth ----
 (function(){
   const M = D.map, sh = D.shares;
-  const maxp = Math.max(...sh.map(s=>s.pct), 1);
-  const op = p => (0.2 + 0.8 * (p / maxp));      // sequential: fill-opacity of accent by share
+  const op = p => (0.15 + 0.85 * (p / 100));     // sequential: fill-opacity of accent on an absolute 0–100% scale
   const by = {}; sh.forEach(s => by[s.code] = s);
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const fmt = iso => { if(!iso) return '—'; const [y,m,d] = iso.split('-'); return `${+d} ${MON[+m-1]} ${y}`; };
@@ -273,7 +287,7 @@ const D = {"generated": "2026-08-09 20:22 UTC", "sources": 3, "themes": [{"id": 
     + `<span class="cl-dates">${fmt(s.d0)} – ${fmt(s.d1)}</span></span>`
     + `<span class="cl-num"><span class="cl-pct">${s.pct}%</span>`
     + `<span class="cl-frac">${s.matched}/${s.total}</span></span></div>`
-  ).join('') + `<div class="scale mono"><span>0%</span><span class="scale-bar"></span><span>${maxp}%</span></div>`;
+  ).join('') + `<div class="scale mono"><span>0%</span><span class="scale-bar"></span><span>100%</span></div>`;
   const cov = D.coverage || {};
   const totAll = sh.reduce((a,s)=>a+s.total, 0);
   document.getElementById('cov').innerHTML =
@@ -391,15 +405,7 @@ function draw(){
     if(i===hover){ctx.beginPath();ctx.arc(p.sx,p.sy,r+4,0,7);
       ctx.strokeStyle=C[p.c];ctx.globalAlpha=.4;ctx.lineWidth=1.5;ctx.stroke();ctx.globalAlpha=1;}
   });
-  // theme labels on the map — the primary identity channel; colour only reinforces
-  ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
-  ctx.font='600 12.5px ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif';
-  const ink=css('--ink');
-  labelPos.forEach(L=>{
-    if(hidden.has(L.id))return;
-    ctx.lineWidth=4;ctx.strokeStyle=ground;ctx.globalAlpha=.9;ctx.strokeText(L.label,L.sx,L.sy);
-    ctx.globalAlpha=1;ctx.fillStyle=ink;ctx.fillText(L.label,L.sx,L.sy);
-  });
+  // theme identity now lives entirely in the legend — no labels drawn on the map
 }
 function nearest(mx,my){
   let best=-1,bd=169;
