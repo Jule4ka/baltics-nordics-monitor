@@ -520,8 +520,56 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
 .freq-arts .src{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--faint);margin-top:2px;}
 @media (max-width:560px){.freq-arts{padding-left:0;}}
+
+/* act 1.5 — temporal timeline (daily stacked bars by country + range brush) */
+.tl{padding:16px 22px 20px;}
+.tl-legend{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
+.tl-chart{display:flex;align-items:flex-end;gap:2px;height:150px;
+  border-bottom:2px solid var(--border2);}
+.tl-col{flex:1 1 0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
+  min-width:0;cursor:pointer;border-radius:3px 3px 0 0;transition:opacity .15s,background .12s;}
+.tl-col:hover{background:color-mix(in srgb,var(--gold) 24%,transparent);}
+.tl-col.out{opacity:.26;}
+.tl-bar{width:100%;display:flex;flex-direction:column-reverse;border-radius:3px 3px 0 0;overflow:hidden;
+  min-height:0;}
+.tl-seg{width:100%;}
+.tl-seg.ee{background:var(--indigo);}
+.tl-seg.lv{background:var(--accent);}
+.tl-seg.lt{background:var(--green);}
+.tl-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);
+  margin-top:7px;font-variant-numeric:tabular-nums;}
+.tl-slider{position:relative;height:30px;margin:10px 6px 2px;}
+.tl-track{position:absolute;left:0;right:0;top:13px;height:4px;background:var(--border2);border-radius:2px;}
+.tl-range{position:absolute;top:13px;height:4px;background:var(--accent);border-radius:2px;}
+.tl-slider input[type=range]{position:absolute;left:0;top:0;width:100%;height:30px;margin:0;
+  -webkit-appearance:none;appearance:none;background:transparent;pointer-events:none;}
+.tl-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;
+  width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);
+  box-shadow:0 1px 3px rgba(0,0,0,.32);cursor:grab;}
+.tl-slider input[type=range]::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;
+  border-radius:50%;background:var(--accent);border:2px solid var(--panel);
+  box-shadow:0 1px 3px rgba(0,0,0,.32);cursor:grab;}
+.tl-slider input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--gold);outline-offset:2px;}
+.tl-sel{margin-top:8px;font-size:12.5px;color:var(--muted);}
+.tl-reset{margin-left:10px;font-size:11px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--accent);background:none;border:0;cursor:pointer;font-family:inherit;padding:0;}
+.tl-reset:hover{text-decoration:underline;}
+.tl-list{display:none;list-style:none;margin:8px 0 0;padding:0;max-height:360px;overflow-y:auto;}
+.tl-arts.open .tl-list{display:block;}
+.tl-list li{padding:8px 0;border-top:1px solid var(--border2);font-size:13px;}
+.tl-list li:first-child{border-top:0;}
+.tl-list a{color:var(--ink);text-decoration:none;display:block;}
+.tl-list a:hover{color:var(--accent);}
+.tl-list .src{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint);margin-top:2px;}
+.tl-arts-h{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;
+  font-size:13.5px;color:var(--ink);font-weight:500;}
+.tl-arts-h .caret{transition:transform .18s;color:var(--faint);}
+.tl-arts.open .tl-arts-h .caret{transform:rotate(90deg);}
+
 @media (max-width:560px){#map{height:440px;}#legend{position:static;max-width:none;margin:10px;}
-  .country-wrap{gap:16px;}.country-map{width:min(240px,66vw);}}
+  .country-wrap{gap:16px;}.country-map{width:min(240px,66vw);}
+  .tl-chart{height:120px;}.tl-axis .tl-ax-mid{display:none;}}
 """
 
 BODY = """
@@ -554,6 +602,30 @@ BODY = """
       <em>news-in-english</em> feed) and was scraped a different number of times. These shares
       reflect what landed on each page over the period — not the newsroom's overall editorial
       priorities, and they are not strictly comparable between countries.</p>
+
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2"/></svg> The timeline — when, and from where?</p>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Defence headlines per day, by country</h2>
+        <span class="hint mono">each bar = one day, stacked by country · click a bar or drag the range to filter the list</span>
+      </div>
+      <div class="tl">
+        <div class="tl-legend" id="tlLegend"></div>
+        <div class="tl-chart" id="tlChart"></div>
+        <div class="tl-axis" id="tlAxis"></div>
+        <div class="tl-slider">
+          <div class="tl-track"></div>
+          <div class="tl-range" id="tlRange"></div>
+          <input type="range" id="tlLo" min="0" max="1" value="0" aria-label="Range start day">
+          <input type="range" id="tlHi" min="0" max="1" value="1" aria-label="Range end day">
+        </div>
+        <div class="tl-sel"><span id="tlSel"></span><button class="tl-reset" id="tlReset" type="button">reset</button></div>
+        <div class="tl-arts" id="tlArts">
+          <div class="tl-arts-h" tabindex="0" role="button" aria-expanded="false"><span class="caret">▶</span><span id="tlArtsLabel"></span></div>
+          <ul class="tl-list" id="tlList"></ul>
+        </div>
+      </div>
+    </section>
 
     <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="3.8"/><path d="M10 1.5V4M10 16V18.5M1.5 10H4M16 10H18.5M4 4l1.9 1.9M14.1 14.1L16 16M16 4l-1.9 1.9M5.9 14.1L4 16"/></svg> The themes — what is it about?</p>
     <section class="panel">
@@ -634,6 +706,114 @@ const D = __DATA__;
   document.getElementById('cov').innerHTML =
     `<span class="star">✴</span> Articles collected <b>${fmt(cov.from)}</b> → <b>${fmt(cov.to)}</b>`
     + ` · <b>${D.points.length}</b> defence-themed of <b>${totAll}</b> total headlines`;
+})();
+
+// ---- act 1.5: temporal timeline — daily stacked bars by country + range brush ----
+(function(){
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmt = iso => { if(!iso) return '—'; const [y,m,d] = iso.split('-'); return `${+d} ${MON[+m-1]}`; };
+  const fmtY = iso => { const [y,m,d] = iso.split('-'); return `${+d} ${MON[+m-1]} ${y}`; };
+  const addDays = (iso,n) => { const dt = new Date(iso+'T00:00:00Z'); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); };
+
+  // map source label -> country code via shares, then order EE, LV, LT
+  const code = {}; (D.shares||[]).forEach(s => code[s.country] = s.code);
+  const ORDER = ['EE','LV','LT'];
+  const CLS = {EE:'ee', LV:'lv', LT:'lt'};
+  const NAME = {EE:'Estonia · ERR', LV:'Latvia · LSM', LT:'Lithuania · LRT'};
+
+  // build the full day span (including zero days) from coverage, falling back to points
+  const ds = D.points.map(p=>p.d).filter(Boolean).sort();
+  const cov = D.coverage || {};
+  const from = cov.from || ds[0], to = cov.to || ds[ds.length-1];
+  if(!from || !to) return;
+  const days = []; for(let d=from; d<=to; d=addDays(d,1)){ days.push(d); if(days.length>1000) break; }
+  const idx = {}; days.forEach((d,i)=>idx[d]=i);
+
+  const counts = days.map(()=>({EE:0,LV:0,LT:0}));
+  const arts = days.map(()=>[]);
+  D.points.forEach(p=>{ const c = code[p.s]; const i = idx[p.d];
+    if(c==null || i==null || !(c in counts[i])) return; counts[i][c]++; arts[i].push(p); });
+  const maxTot = Math.max(1, ...counts.map(c=>c.EE+c.LV+c.LT));
+
+  const hidden = new Set();               // toggled-off country codes
+  let lo = 0, hi = days.length-1;         // selected day-index window
+  const N = days.length;
+  const loEl = document.getElementById('tlLo'), hiEl = document.getElementById('tlHi');
+  loEl.max = hiEl.max = N-1; hiEl.value = N-1;
+
+  function legend(){
+    document.getElementById('tlLegend').innerHTML = ORDER.map(c=>{
+      const tot = counts.reduce((a,d)=>a+d[c],0);
+      return `<div class="leg${hidden.has(c)?' off':''}" data-c="${c}" tabindex="0">`
+        + `<span class="sw tl-seg ${CLS[c]}" style="border-radius:2px"></span>${NAME[c]}`
+        + `<span class="lc">${tot}</span></div>`;
+    }).join('');
+    document.querySelectorAll('#tlLegend .leg').forEach(el=>{
+      const toggle=()=>{const c=el.dataset.c; hidden.has(c)?hidden.delete(c):hidden.add(c);
+        el.classList.toggle('off'); chart(); listing();};
+      el.onclick=toggle;
+      el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
+    });
+  }
+
+  function dayTotal(i){ return ORDER.reduce((a,c)=>a + (hidden.has(c)?0:counts[i][c]), 0); }
+
+  function chart(){
+    const el = document.getElementById('tlChart');
+    el.innerHTML = days.map((d,i)=>{
+      const tot = dayTotal(i);
+      const segs = ORDER.filter(c=>!hidden.has(c)).map(c=>{
+        const n = counts[i][c]; if(!n) return '';
+        return `<div class="tl-seg ${CLS[c]}" style="height:${(n/tot*100).toFixed(2)}%"></div>`;
+      }).join('');
+      const parts = ORDER.map(c=>`${c} ${counts[i][c]}`).join(' · ');
+      const out = (i<lo||i>hi) ? ' out' : '';
+      const barH = (tot/maxTot*100).toFixed(2);
+      return `<div class="tl-col${out}" data-i="${i}" title="${fmtY(d)} — ${tot} article${tot!==1?'s':''} (${parts})">`
+        + `<div class="tl-bar" style="height:${barH}%">${segs}</div></div>`;
+    }).join('');
+    el.querySelectorAll('.tl-col').forEach(col=>{
+      col.onclick=()=>{ const i=+col.dataset.i; lo=hi=i; loEl.value=hi==0?0:i; hiEl.value=i; sync(); };
+    });
+  }
+
+  function slider(){
+    const rng = document.getElementById('tlRange');
+    const a = lo/(N-1||1)*100, b = hi/(N-1||1)*100;
+    rng.style.left = a+'%'; rng.style.width = (b-a)+'%';
+  }
+
+  function listing(){
+    let picked = [];
+    for(let i=lo;i<=hi;i++) picked = picked.concat(arts[i].filter(p=>!hidden.has(code[p.s])));
+    picked.sort((x,y)=> y.d.localeCompare(x.d) || x.h.localeCompare(y.h));
+    const span = lo===hi ? fmtY(days[lo]) : `${fmt(days[lo])} – ${fmtY(days[hi])}`;
+    document.getElementById('tlSel').innerHTML =
+      `<b>${picked.length}</b> article${picked.length!==1?'s':''} · ${span}`;
+    document.getElementById('tlArtsLabel').textContent =
+      picked.length ? `read ${picked.length} article${picked.length!==1?'s':''} in view` : 'no articles in this range';
+    document.getElementById('tlList').innerHTML = picked.map(p=>
+      `<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}`
+      + `<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
+  }
+
+  function sync(){ chart(); slider(); listing(); }
+
+  loEl.oninput=()=>{ lo=Math.min(+loEl.value,+hiEl.value); hi=Math.max(+loEl.value,+hiEl.value); sync(); };
+  hiEl.oninput=loEl.oninput;
+  document.getElementById('tlReset').onclick=()=>{ lo=0; hi=N-1; loEl.value=0; hiEl.value=N-1;
+    hidden.clear(); legend(); sync(); };
+
+  const artsBox = document.getElementById('tlArts'), artsH = artsBox.querySelector('.tl-arts-h');
+  const toggleArts=()=>{ const open=artsBox.classList.toggle('open'); artsH.setAttribute('aria-expanded',open); };
+  artsH.onclick=toggleArts;
+  artsH.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleArts();}};
+
+  // axis: first · middle · last
+  document.getElementById('tlAxis').innerHTML =
+    `<span>${fmtY(days[0])}</span><span class="tl-ax-mid">${fmt(days[Math.floor((N-1)/2)])}</span><span>${fmtY(days[N-1])}</span>`;
+
+  legend(); sync();
 })();
 
 const cvs = document.getElementById('map'), ctx = cvs.getContext('2d');
