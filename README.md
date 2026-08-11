@@ -91,11 +91,14 @@ baltics-nordics-monitor/
 │   ├── nordics-monitor.html           #   the report — full self-contained page (THIS is published)
 │   ├── nordics-monitor-artifact.html  #   content-only variant (no <html>/<head>; for embedding)
 │   ├── nordics-monitor-data.json      #   the computed data behind the page
-│   └── nordics-monitor-clustered.csv  #   every matched article tagged with its theme
+│   ├── nordics-monitor-clustered.csv  #   every matched article tagged with its theme(s)
+│   ├── nordics-monitor-embed.html     #   OPT-IN (--embed) — report + the embeddings prototype
+│   └── emb_cache/                     #   OPT-IN — cached embeddings, keyed by URL (incremental)
 │
 ├── err_ee.ipynb  lrt_lt.ipynb  lsm_lv.ipynb   # the three scrapers
 ├── scrape.py                          # Playwright helper: fetches the LSM homepage past Cloudflare
 ├── topic_analysis.py                  # the analysis + report builder (the heart of the project)
+├── embeddings_analysis.py             # OPT-IN embeddings prototype (semantic map; --embed)
 ├── lsm_page.html                      # scrape.py's rendered LSM homepage (intermediate file)
 └── .github/workflows/                 # the once-a-day automation
 ```
@@ -130,9 +133,12 @@ Two of the three are easy; one is not:
    so articles with similar wording sit near each other. *(This is the "proximity"; there
    is no more KMeans clustering — that was removed because the clusters overlapped and
    meant nothing.)*
-6. **Assign a theme** to each article by the keyword bucket its words hit hardest
-   (Ukraine, Russia & Kremlin, NATO & defence, Drones & airspace, Border & migration,
-   Hybrid & sabotage, China, or "Other").
+6. **Assign themes** by hand-authored keyword buckets — **not** clustering. Each article
+   is tagged with **every** bucket its words hit (headline weighted ×3 over body) and
+   coloured by the strongest, so it can appear under more than one theme (*multi-label*).
+   Buckets: Ukraine, Russia & Kremlin, NATO & defence, Drones & airspace, Border & migration,
+   Hybrid warfare, China & Indo-Pacific, or "Other defence". "NATO & defence" is the broad
+   catch-all, so it loses scoring ties to a more specific theme.
 7. **Keyword frequency** — count, across the **headlines**, how many articles mention
    each word (merging variants: russia/russian → russia, drones → drone, …).
 8. **Render** the report to `analysis/nordics-monitor.html` (+ the JSON, the tagged CSV,
@@ -140,6 +146,45 @@ Two of the three are easy; one is not:
 
 The page is **fully self-contained** — inline CSS/JS, the Baltic map baked in as SVG,
 no external requests — so it works as a plain file, in an email, or embedded anywhere.
+
+### Optional: the embeddings prototype (`--embed`)
+
+`embeddings_analysis.py` is an **opt-in** experiment that runs the modern
+"semantic" stack from the [DataHarvest 2026 workshop](https://github.com/resolveworks/dataharvest2026)
+**alongside** the curated themes — it does **not** replace them. It only runs when you pass the flag,
+and it writes to **separate files**, so the shipping report is never touched:
+
+```bash
+venv/Scripts/python.exe topic_analysis.py --embed
+# higher-quality model (the workshop's pick — heavier, pulls torch on first use):
+venv/Scripts/python.exe topic_analysis.py --embed --embed-model BAAI/bge-large-en-v1.5
+# or run the module on its own -> analysis/embeddings-prototype.html
+venv/Scripts/python.exe embeddings_analysis.py
+```
+
+What it does, for **two text scopes side by side** — `content` (headline + body) and
+`headline` (titles only):
+
+1. **Embed** each article into a semantic vector — meaning, not word overlap. Vectors are
+   **cached by URL** (`analysis/emb_cache/`), so each run only embeds *new* articles.
+2. **UMAP → 2-D** map with `metric="cosine"` (compare *directions*, not distance — in high
+   dimensions Euclidean distance collapses; embedding meaning lives in the angle).
+3. **UMAP → 5-D → HDBSCAN** density clustering; `cluster == -1` are **outliers**.
+4. **TF-IDF** top terms label each discovered cluster (they *drift* between runs — that's the
+   nature of unsupervised topics, and why the curated buckets remain the primary labels).
+5. **Anomalies** list (stories that fit no cluster) + a **mislabel audit** that flags articles
+   whose semantic neighbours mostly carry a *different* regex theme than the buckets assigned.
+
+**Model & install.** Default is `BAAI/bge-base-en-v1.5` via **fastembed** (ONNX, no torch —
+CI-light); `BAAI/bge-large-en-v1.5` (top of the [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard),
+English) is a one-flag swap. HDBSCAN ships in scikit-learn 1.9; the extra deps are
+`umap-learn` and `fastembed` (and `sentence-transformers` only if you pick a model fastembed
+lacks). Text is the broadcasters' **English** editions, so an English model fits.
+
+> **Why it's a prototype, not the default:** a semantic scatter with more than three
+> colour-coded clusters can't be made colour-blind-safe by colour alone, cluster names are
+> unstable run-to-run, and true query search would need a runtime the static site doesn't
+> have. It's a **navigation / anomaly-finding** aid, not a replacement for the curated themes.
 
 ## The report — what's on the page
 

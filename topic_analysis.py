@@ -9,8 +9,14 @@ Pipeline:
   3. Fetch the full article body for each matched article (robust, skips failures).
   4. TF-IDF vectorise (headline + body).
   5. Dimensionality reduction: TruncatedSVD (LSA) -> t-SNE 2D layout.
-  6. Clustering: KMeans on the LSA space, k chosen by silhouette.
-  7. Per-cluster keyword labels via mean TF-IDF weight.
+     The map's (x, y) positions come from here (near = shared wording); this
+     is the ONLY thing the ML does — it does not decide the themes.
+  6. Assign themes by hand-authored keyword buckets (THEMES), NOT clustering:
+     each article is tagged with every bucket its keywords hit (headline
+     weighted x3 over body); its colour is the strongest match. Articles that
+     match none of the buckets fall back to "Other defence". Multi-label —
+     an article can appear under more than one theme.
+  7. Per-theme keyword labels via mean TF-IDF weight (descriptive only).
   8. Render a self-contained, dependency-free interactive HTML report
      (Canvas topic map) + a data JSON + a clustered CSV.
 
@@ -63,7 +69,7 @@ BALTIC_MAP = {
 # Theme filter: defence / geopolitics / Russia-Ukraine-China / war / drones
 KEYWORDS = (
     r"\b(ukrain|russ|kremlin|putin|moscow|belarus|defen[cs]e|militar|nato|war\b|"
-    r"warfare|drone|china|chinese|beijing|weapon|missile|army|troop|soldier|"
+    r"warfare|drone|china|chinese|beijing|taiwan|weapon|missile|army|troop|soldier|"
     r"sanction|wagner|zelensky|invasion|espionage|spy|sabotag|cyber|airspace|"
     r"submarine|frigate|warship|warplane|hybrid|mobilis|mobiliz|conscript|"
     r"artillery|shelling|front[\s-]?line|refugee|border)\w*"
@@ -121,11 +127,12 @@ def canon(w):
         return w[:-1]                                    # drones -> drone, troops -> troop
     return w
 
-# Categorical palette for the clusters (legible on both light and dark grounds).
-# Thematic keyword buckets for the topic map (act 2). Each matched article is
-# assigned to the bucket its keywords hit hardest (headline weighted x3); the
-# fallback is "Other defence". Colour + an on-map label carry the theme, while
-# proximity (t-SNE) carries semantic similarity — no opaque clustering.
+# Thematic keyword buckets for the topic map (act 2). NOT clusters: each matched
+# article is tagged with EVERY bucket its keywords hit (headline weighted x3);
+# the strongest match becomes its colour/primary theme, and it also appears under
+# any other bucket it hits (multi-label). Articles matching none fall back to
+# "Other defence". "NATO & defence" is the broad catch-all, so on a scoring tie it
+# yields to a more specific theme (see THEME_RANK / assign()).
 THEMES = [
     ("Ukraine",            r"ukrain|zelensk|kyiv|kharkiv|donbas|donetsk|kherson|zaporizh|odesa"),
     ("Russia & Kremlin",   r"russ|kremlin|putin|moscow|wagner|lavrov|medvedev"),
@@ -133,25 +140,37 @@ THEMES = [
                            r"missile|artillery|himars|atacms|warship|frigate|submarine|\barmy\b|"
                            r"rearm|conscript|mobilis|mobiliz"),
     ("Drones & airspace",  r"drone|airspace|uav|incursion|airport|warplane|aircraft|\bjet\b"),
-    ("Border & migration", r"border|migrant|refugee|belarus|frontier|fence|smuggl|crossing|barbed"),
+    ("Border & migration", r"border|migrant|refugee|belarus|frontier|\bfence|smuggl|crossing|barbed"),
     ("Hybrid warfare",
                            r"sabotag|cyber|espionage|\bspy|hybrid|disinfo|propaganda|interfer|"
-                           r"meddl|cognitive|influence\s+oper|jamming|\bgps\b|undersea|cable|"
-                           r"shadow fleet|provocation|coercion|china|chinese|beijing"),
+                           r"meddl|cognitive|influence\s+oper|jamming|\bgps\b|undersea|\bcable|"
+                           r"shadow fleet|provocation|coercion"),
+    ("China & Indo-Pacific",
+                           r"\bchina\b|chinese|beijing|taiwan|xi jinping|indo.?pacific|"
+                           r"south china"),
 ]
 THEME_OTHER = "Other defence"
 THEME_PATS = [re.compile(p, re.I) for _, p in THEMES]
 
-# Categorical palette (validated reference hues), light + dark step per theme id.
-# Identity is carried mainly by the on-map labels; colour reinforces. Last = grey "Other".
+# Primary-theme tie-break, index-aligned to THEMES (higher wins on a tie).
+# "NATO & defence" (id 2) is the broad sink, so it loses ties to any specific theme.
+THEME_RANK = [2, 2, 1, 2, 2, 2, 2]
+
+# Categorical palette (validated against dataviz/validate_palette.js), light + dark
+# step per theme id. Identity is carried by the legend + hover tooltip; colour
+# reinforces. A 7-hue scatter cannot clear the all-pairs colour-blind floor by
+# colour alone (it never can past 3 hues), so theme names ride in the tooltip as
+# the secondary channel. Last id = grey "Other". Passes every ADJACENT gate in
+# both modes; worst adjacent CVD ΔE 9.1 light / 8.4 dark.
 THEME_COLORS = [
     ("#2a78d6", "#3987e5"),  # 0 Ukraine                    blue
     ("#eb6834", "#d95926"),  # 1 Russia & Kremlin           orange
-    ("#1baf7a", "#199e70"),  # 2 NATO & defence             teal-green
+    ("#1baf7a", "#199e70"),  # 2 NATO & defence             aqua-green
     ("#eda100", "#c98500"),  # 3 Drones & airspace          yellow
     ("#e87ba4", "#d55181"),  # 4 Border & migration         magenta
-    ("#7a68c4", "#9085e9"),  # 5 Hybrid warfare              violet
-    ("#9a8f7c", "#8f836d"),  # 6 Other defence              warm grey
+    ("#4a3aa7", "#9085e9"),  # 5 Hybrid warfare             violet
+    ("#b02a37", "#d0574f"),  # 6 China & Indo-Pacific       crimson
+    ("#9a8f7c", "#8f836d"),  # 7 Other defence              warm grey
 ]
 COLORS_LIGHT = [c[0] for c in THEME_COLORS]
 COLORS_DARK = [c[1] for c in THEME_COLORS]
@@ -260,23 +279,37 @@ def analyse(df):
               learning_rate="auto", random_state=42).fit_transform(Z)
     df["x"], df["y"] = xy[:, 0], xy[:, 1]
 
-    # Assign each article to the theme its keywords hit hardest (headline weighted x3).
-    def theme_of(h, b):
-        best_i, best_s = len(THEMES), 0            # default index = "Other defence"
-        for i, pat in enumerate(THEME_PATS):
-            s = 3 * len(pat.findall(h)) + len(pat.findall(b))
-            if s > best_s:
-                best_s, best_i = s, i
-        return best_i
-    df["theme"] = [theme_of(h, b) for h, b in
-                   zip(df["headline"].fillna(""), df["body"].fillna(""))]
+    # Multi-label: tag each article with EVERY theme its keywords hit (headline x3),
+    # pick the strongest as the colour/primary. No headline hit anywhere -> keep only
+    # the single best body theme; nothing at all -> "Other defence".
+    OTHER_ID = len(THEMES)
 
-    # Per-theme metadata: count, top mean-TF-IDF terms, and the on-map label centroid.
+    def assign(h, b):
+        hits = [(len(p.findall(h)), len(p.findall(b))) for p in THEME_PATS]
+        members = [i for i, (hh, _) in enumerate(hits) if hh > 0]
+        if not members:
+            body = [i for i, (_, bb) in enumerate(hits) if bb > 0]
+            if body:
+                members = [max(body, key=lambda i: (hits[i][1], THEME_RANK[i], -i))]
+            else:
+                return OTHER_ID, [OTHER_ID]
+        # primary: most headline hits, then body hits, then rank (NATO loses), then order
+        primary = max(members, key=lambda i: (hits[i][0], hits[i][1], THEME_RANK[i], -i))
+        return primary, sorted(members)
+
+    assigned = [assign(h, b) for h, b in
+                zip(df["headline"].fillna(""), df["body"].fillna(""))]
+    df["theme"] = [p for p, _ in assigned]          # primary theme (colour)
+    df["themes"] = [m for _, m in assigned]          # all themes it belongs to
+
+    # Per-theme metadata: MEMBERSHIP count (an article counts under each of its
+    # themes), top mean-TF-IDF terms, and the on-map label centroid.
     Xa = X.toarray()
     names = [t[0] for t in THEMES] + [THEME_OTHER]
+    members_col = df["themes"].tolist()
     themes = []
     for tid in range(len(THEMES) + 1):
-        idx = np.where(df["theme"].values == tid)[0]
+        idx = np.array([i for i, ms in enumerate(members_col) if tid in ms], dtype=int)
         if len(idx) == 0:
             continue
         mean_w = Xa[idx].mean(axis=0)
@@ -314,6 +347,7 @@ def analyse(df):
 def build_payload(df, themes, keywords, shares):
     points = [{
         "x": round(float(r.x), 3), "y": round(float(r.y), 3), "c": int(r.theme),
+        "cs": [int(t) for t in r.themes],
         "h": r.headline, "s": SRC_LABEL[r.source], "d": str(r.scrape_date), "u": r.url,
     } for r in df.itertuples()]
     d0 = [s["d0"] for s in shares if s["d0"]]
@@ -578,8 +612,7 @@ BODY = """
     <p class="eyebrow mono">Baltic Defence &amp; Geopolitics Monitor</p>
     <h1>What do Baltic defence news look like?</h1>
     <p class="lede">How much of the Baltic public broadcasters' news is about defence and security,
-    and what is it actually about? First the numbers by country, then the themes: every matching
-      article embedded, coloured by topic and mapped by shared language.</p>
+    and what is it actually about? </p>
     <div class="stats mono" id="stats"></div>
   </header>
   <div class="weave header-weave" aria-hidden="true"></div>
@@ -587,8 +620,8 @@ BODY = """
     <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M10 1.5 L18.5 10 L10 18.5 L1.5 10 Z"/><rect x="4" y="4" width="12" height="12"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/></svg> The numbers — how much is defence?</p>
     <section class="panel">
       <div class="panel-h">
-        <h2>Defence &amp; security share by country</h2>
-        <span class="hint mono">matching headlines ÷ all headlines · click a country to open its source</span>
+        <h2>Defence &amp; security articles share by country</h2>
+        <span class="hint mono">matching headlines ÷ all headlines</span>
       </div>
       <div class="country-wrap">
         <div class="country-map"><svg id="cmap" role="img"
@@ -597,17 +630,15 @@ BODY = """
       </div>
       <div class="cov" id="cov"></div>
     </section>
-    <p class="note"><b>Read with care:</b> each broadcaster's English page carries a different mix
-      (LSM's homepage includes weather, culture &amp; local news; LRT's is a curated
-      <em>news-in-english</em> feed) and was scraped a different number of times. These shares
-      reflect what landed on each page over the period — not the newsroom's overall editorial
-      priorities, and they are not strictly comparable between countries.</p>
+    <p class="note"><b>Read with care:</b> each broadcaster's English page carries a different mix and was scraped 
+      a different number of times. These shares reflect what landed on each page over the period, not the newsroom's 
+      overall editorial priorities, and they are not strictly comparable between countries.</p>
 
     <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2"/></svg> The timeline — when, and from where?</p>
     <section class="panel">
       <div class="panel-h">
         <h2>Defence headlines per day, by country</h2>
-        <span class="hint mono">each bar = one day, stacked by country · click a bar or drag the range to filter the list</span>
+        <span class="hint mono">each bar = one day, stacked by country</span>
       </div>
       <div class="tl">
         <div class="tl-legend" id="tlLegend"></div>
@@ -631,7 +662,7 @@ BODY = """
     <section class="panel">
       <div class="panel-h">
         <h2>Topic map</h2>
-        <span class="hint mono">near = similar wording · colour = theme (see legend)</span>
+        <span class="hint mono">near = similar wording · colour = primary theme · hover for the theme name</span>
       </div>
       <div class="mapwrap">
         <canvas id="map"></canvas>
@@ -639,14 +670,14 @@ BODY = """
         <div id="tip"></div>
       </div>
     </section>
-    <p class="section-h">By theme — select one to read its articles</p>
+    <p class="section-h">By theme — select one to read its articles (an article can sit under more than one)</p>
     <section class="grid" id="cards"></section>
 
     <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8L10 3L17 8M3 12.5L10 7.5L17 12.5M3 17L10 12L17 17"/></svg> The words — what comes up most</p>
     <section class="panel">
       <div class="panel-h">
         <h2>Most frequent terms</h2>
-        <span class="hint mono">counted across article titles · a title recurs under each frequent word it uses · click to list</span>
+        <span class="hint mono">counted across article titles · a title recurs under each frequent word it uses </span>
       </div>
       <div class="freq" id="freq"></div>
     </section>
@@ -656,8 +687,9 @@ BODY = """
     Sources: ERR (Estonia), LRT (Lithuania), LSM (Latvia), English editions.<br>
     Method: headlines filtered to defence/geopolitics themes, full article bodies fetched,
     TF-IDF vectorised, reduced with TruncatedSVD (LSA) and laid out with t-SNE so nearby dots
-    share wording. Each article is coloured by the theme its keywords match most (read the legend);
-    hover a dot for its headline. The most frequent terms are tallied across the article titles:
+    share wording. Themes are hand-authored keyword buckets, not clusters: an article is tagged with
+    every bucket its words hit (headline weighted) and coloured by the strongest — so it can appear
+    under more than one theme; hover a dot for its theme name(s). The most frequent terms are tallied across the article titles:
     with common English stopwords and the Baltic countries' own names and capitals removed, so only
     the distinctive words surface; word variants (russia/russian, drone/drones) count as one.
   </footer>
@@ -666,6 +698,7 @@ BODY = """
 
 SCRIPT = """
 const D = __DATA__;
+const THEME_LABEL = {}; (D.themes||[]).forEach(t=>THEME_LABEL[t.id]=t.label);   // id -> name (for tooltips + multi-label tags)
 
 // ---- act 1: Baltic defence-share choropleth ----
 (function(){
@@ -850,9 +883,13 @@ function renderLegend(){
 // per-theme cards — the article list is hidden until you select (click) a theme
 function renderCards(){
   document.getElementById('cards').innerHTML = D.themes.map(t=>{
-    const arts = D.points.filter(p=>p.c===t.id).sort((a,b)=>b.d.localeCompare(a.d));
+    const arts = D.points.filter(p=>(p.cs||[p.c]).includes(t.id)).sort((a,b)=>b.d.localeCompare(a.d));
     const col = C[t.id];
-    const li = arts.map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
+    const li = arts.map(p=>{
+      const also = (p.cs||[]).filter(id=>id!==t.id).map(id=>THEME_LABEL[id]).filter(Boolean);
+      const tag = also.length ? ` · also ${also.join(', ')}` : '';
+      return `<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}${tag}</span></a></li>`;
+    }).join('');
     return `<div class="card" style="--dot:${col}"><h3 class="card-h">`
       + `<span class="sw" style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>`
       + `${t.label}<span class="lc">${t.count}</span><span class="caret">▶</span></h3>`
@@ -938,7 +975,7 @@ cvs.addEventListener('mousemove',e=>{
   const h=nearest(mx,my);
   if(h!==hover){hover=h;draw();}
   if(h>=0){const p=pts[h];cvs.style.cursor='pointer';
-    tip.innerHTML=`<b>${p.h}</b><span class="meta">${p.s} · ${p.d}</span>`;
+    tip.innerHTML=`<b>${p.h}</b><span class="meta">${p.s} · ${p.d} · ${(p.cs||[p.c]).map(id=>THEME_LABEL[id]).filter(Boolean).join(', ')}</span>`;
     tip.style.opacity=1;
     let tx=mx+16,ty=my+16;
     if(tx+tip.offsetWidth>wrap.clientWidth)tx=mx-tip.offsetWidth-16;
@@ -960,37 +997,68 @@ matchMedia('(prefers-color-scheme:dark)').addEventListener('change',onTheme);
 """
 
 
-def render(df, themes, keywords, shares):
+def _wrap(inner, title="Baltic Defence &amp; Geopolitics Monitor"):
+    return (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        f"<title>{title}</title></head><body>{inner}</body></html>"
+    )
+
+
+def render(df, themes, keywords, shares, embed=False, embed_model=None):
     payload = build_payload(df, themes, keywords, shares)
     data_js = json.dumps(payload, ensure_ascii=False)
     script = SCRIPT.replace("__DATA__", data_js)
     inner = f"<style>{CSS}</style>\n{BODY}\n<script>{script}</script>"
 
-    standalone = (
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<title>Baltic Defence &amp; Geopolitics Monitor</title></head>"
-        f"<body>{inner}</body></html>"
-    )
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(f"{OUT_DIR}/nordics-monitor.html", "w", encoding="utf-8") as f:
-        f.write(standalone)
+        f.write(_wrap(inner))
     with open(f"{OUT_DIR}/nordics-monitor-artifact.html", "w", encoding="utf-8") as f:
         f.write(inner)  # content-only, for the Claude Artifact wrapper
     with open(f"{OUT_DIR}/nordics-monitor-data.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
-    print(f"[render] wrote {OUT_DIR}/nordics-monitor.html ({len(standalone)//1024} KB, self-contained)")
+    print(f"[render] wrote {OUT_DIR}/nordics-monitor.html ({len(_wrap(inner))//1024} KB, self-contained)")
+
+    # --embed: ALSO write a separate augmented report; the shipping files above
+    # are left exactly as they are (current thing untouched).
+    if embed:
+        import embeddings_analysis as emb
+        names = [t[0] for t in THEMES] + [THEME_OTHER]
+        ecss, ehtml, escript = emb.build_report_fragment(
+            df, model=embed_model or emb.DEFAULT_MODEL, theme_names=names)
+        body = BODY.replace("</main>", ehtml + "\n  </main>")
+        einner = (f"<style>{CSS}{ecss}</style>\n{body}\n<script>{script}</script>"
+                  f"\n<script>{escript}</script>")
+        with open(f"{OUT_DIR}/nordics-monitor-embed.html", "w", encoding="utf-8") as f:
+            f.write(_wrap(einner, "Baltic Monitor — with embeddings prototype"))
+        with open(f"{OUT_DIR}/nordics-monitor-embed-artifact.html", "w", encoding="utf-8") as f:
+            f.write(einner)
+        print(f"[render] wrote {OUT_DIR}/nordics-monitor-embed.html ({len(_wrap(einner))//1024} KB)")
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="Baltics/Nordics Monitor report generator")
+    ap.add_argument("--embed", action="store_true",
+                    help="ALSO build the experimental embeddings report "
+                         "(nordics-monitor-embed.html); shipping files stay untouched")
+    ap.add_argument("--embed-model", default=None,
+                    help="embedding model id (default: bge-base via fastembed; "
+                         "try BAAI/bge-large-en-v1.5)")
+    args = ap.parse_args()
+
     df_all = load_data()
     df = filter_themes(df_all)
     shares = compute_shares(df_all, df)
     df["body"] = fetch_all(df["url"].tolist())
     df, themes, keywords = analyse(df)
-    render(df, themes, keywords, shares)
-    df[["url", "headline", "source", "scrape_date", "theme"]].to_csv(
-        f"{OUT_DIR}/nordics-monitor-clustered.csv", index=False, encoding="utf-8")
+    render(df, themes, keywords, shares, embed=args.embed, embed_model=args.embed_model)
+    names = [t[0] for t in THEMES] + [THEME_OTHER]
+    out = df[["url", "headline", "source", "scrape_date", "theme"]].copy()
+    out["theme_name"] = df["theme"].map(lambda i: names[i])
+    out["all_themes"] = df["themes"].map(lambda ms: "; ".join(names[i] for i in ms))
+    out.to_csv(f"{OUT_DIR}/nordics-monitor-clustered.csv", index=False, encoding="utf-8")
     print(f"[done] {OUT_DIR}/ nordics-monitor.html + artifact + data json + clustered csv")
 
 
