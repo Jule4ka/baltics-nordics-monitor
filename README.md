@@ -40,7 +40,7 @@ key to understanding everything else:
 
 | Repo | Role |
 |---|---|
-| **`Jule4ka/baltics-baltics-monitor`** (this one) | **The engine.** Scrapers, the analysis script, and the daily GitHub Action that produces the page. |
+| **`Jule4ka/baltics-nordics-monitor`** (this one) | **The engine.** Scrapers, the analysis script, and the daily GitHub Action that produces the page. |
 | **`Jule4ka/Jule4ka.github.io`** | **The website.** A [Nikola](https://getnikola.com/) static site (Julia's personal page). The finished monitor is published *into* this repo as one of its pages. |
 
 Every day, the engine repo builds the page and **pushes it into the website repo**,
@@ -83,7 +83,7 @@ Only the **English editions** are scraped.
 ## Project structure
 
 ```
-baltics-baltics-monitor/
+baltics-nordics-monitor/
 ├── data/                              # INPUTS (scraped headlines)
 │   ├── <src>-always-updated.csv       #   master archive per source (deduplicated by URL)
 │   └── err_ee/  lrt_lt/  lsm_lv/       #   a timestamped snapshot of every scrape run
@@ -93,16 +93,29 @@ baltics-baltics-monitor/
 │   ├── baltics-monitor-artifact.html  #   content-only variant (no <html>/<head>; for embedding)
 │   ├── baltics-monitor-data.json      #   the computed data behind the page
 │   ├── baltics-monitor-clustered.csv  #   every matched article tagged with its theme(s)
-│   ├── baltics-monitor-embed.html     #   OPT-IN (--embed) — report + the embeddings prototype
-│   └── emb_cache/                     #   OPT-IN — cached embeddings, keyed by URL (incremental)
+│   └── emb_cache/                     #   COMMITTED — cached embeddings, keyed by URL (incremental)
+│
+│   # ── the pipeline, split into focused modules (edit whichever part you mean) ──
+├── topic_analysis.py                  # thin CLI entrypoint — just wires the steps together
+├── config.py                          # sources, the KEYWORDS filter, THEME buckets, palette
+├── pipeline.py                        # load → filter → fetch → analyse (TF-IDF / t-SNE)
+├── render.py                          # assembles the self-contained page (embeddings folded in)
+├── embeddings_analysis.py             # the semantic-embeddings sections (fastembed → UMAP → HDBSCAN)
+├── assets.py                          # loads the three front-end files below
+├── assets/                            # THE FRONT-END — edit these directly
+│   ├── report.css                     #   styles
+│   ├── report.html                    #   page body markup
+│   └── report.js                      #   the interactive Canvas map + charts
 │
 ├── err_ee.ipynb  lrt_lt.ipynb  lsm_lv.ipynb   # the three scrapers
 ├── scrape.py                          # Playwright helper: fetches the LSM homepage past Cloudflare
-├── topic_analysis.py                  # the analysis + report builder (the heart of the project)
-├── embeddings_analysis.py             # OPT-IN embeddings prototype (semantic map; --embed)
 ├── lsm_page.html                      # scrape.py's rendered LSM homepage (intermediate file)
 └── .github/workflows/                 # the once-a-day automation
 ```
+
+The embeddings sections are now part of the main page (after the keyword-bucket
+sections), not a separate file. Build a fast, embeddings-free page locally with
+`python topic_analysis.py --no-embed`.
 
 ## How it works, step by step
 
@@ -142,23 +155,26 @@ Two of the three are easy; one is not:
    catch-all, so it loses scoring ties to a more specific theme.
 7. **Keyword frequency** — count, across the **headlines**, how many articles mention
    each word (merging variants: russia/russian → russia, drones → drone, …).
-8. **Render** the report to `analysis/baltics-monitor.html` (+ the JSON, the tagged CSV,
-   and the content-only artifact variant).
+8. **Render** (`render.py`) the report to `analysis/baltics-monitor.html` (+ the JSON, the
+   tagged CSV, and the content-only artifact variant). The embeddings sections (below) are
+   spliced in here, after the keyword-bucket sections.
 
 The page is **fully self-contained** — inline CSS/JS, the Baltic map baked in as SVG,
 no external requests — so it works as a plain file, in an email, or embedded anywhere.
 
-### Optional: the embeddings prototype (`--embed`)
+### The embeddings sections (`embeddings_analysis.py`)
 
-`embeddings_analysis.py` is an **opt-in** experiment that runs the modern
-"semantic" stack from the [DataHarvest 2026 workshop](https://github.com/resolveworks/dataharvest2026)
-**alongside** the curated themes — it does **not** replace them. It only runs when you pass the flag,
-and it writes to **separate files**, so the shipping report is never touched:
+`embeddings_analysis.py` runs the modern "semantic" stack from the
+[DataHarvest 2026 workshop](https://github.com/resolveworks/dataharvest2026)
+**alongside** the curated themes — it does **not** replace them. Its sections are now
+**part of the main page** (spliced in after the keyword-bucket sections). It runs by
+default; pass `--no-embed` for a fast, embeddings-free local build:
 
 ```bash
-venv/Scripts/python.exe topic_analysis.py --embed
+venv/Scripts/python.exe topic_analysis.py             # full page (with embeddings)
+venv/Scripts/python.exe topic_analysis.py --no-embed  # fast: TF-IDF sections only
 # higher-quality model (the workshop's pick — heavier, pulls torch on first use):
-venv/Scripts/python.exe topic_analysis.py --embed --embed-model BAAI/bge-large-en-v1.5
+venv/Scripts/python.exe topic_analysis.py --embed-model BAAI/bge-large-en-v1.5
 # or run the module on its own -> analysis/embeddings-prototype.html
 venv/Scripts/python.exe embeddings_analysis.py
 ```
@@ -182,10 +198,12 @@ English) is a one-flag swap. HDBSCAN ships in scikit-learn 1.9; the extra deps a
 `umap-learn` and `fastembed` (and `sentence-transformers` only if you pick a model fastembed
 lacks). Text is the broadcasters' **English** editions, so an English model fits.
 
-> **Why it's a prototype, not the default:** a semantic scatter with more than three
+> **Read it as an aid, not the primary labels:** a semantic scatter with more than three
 > colour-coded clusters can't be made colour-blind-safe by colour alone, cluster names are
 > unstable run-to-run, and true query search would need a runtime the static site doesn't
-> have. It's a **navigation / anomaly-finding** aid, not a replacement for the curated themes.
+> have. It's a **navigation / anomaly-finding** aid — the curated keyword buckets remain the
+> primary, stable themes. The daily CI installs `fastembed`/`umap-learn` in a non-fatal step,
+> so if those ever fail to install the page just falls back to the TF-IDF-only sections.
 
 ## The report — what's on the page
 

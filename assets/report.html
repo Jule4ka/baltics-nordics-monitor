@@ -1,0 +1,88 @@
+
+<div class="shell">
+  <header>
+    <p class="eyebrow mono">Baltic Defence &amp; Geopolitics Monitor</p>
+    <h1>What do Baltic defence news look like?</h1>
+    <p class="lede">How much of the Baltic public broadcasters' news is about defence and security,
+    and what is it actually about? </p>
+    <div class="stats mono" id="stats"></div>
+  </header>
+  <div class="weave header-weave" aria-hidden="true"></div>
+  <main>
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M10 1.5 L18.5 10 L10 18.5 L1.5 10 Z"/><rect x="4" y="4" width="12" height="12"/><circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none"/></svg> The numbers — how much is defence?</p>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Defence &amp; security articles share by country</h2>
+        <span class="hint mono">matching headlines ÷ all headlines</span>
+      </div>
+      <div class="country-wrap">
+        <div class="country-map"><svg id="cmap" role="img"
+          aria-label="Map of Estonia, Latvia and Lithuania shaded by share of defence news"></svg></div>
+        <div class="country-legend" id="clegend"></div>
+      </div>
+      <div class="cov" id="cov"></div>
+    </section>
+    <p class="note"><b>Read with care:</b> each broadcaster's English page carries a different mix and was scraped 
+      a different number of times. These shares reflect what landed on each page over the period, not the newsroom's 
+      overall editorial priorities, and they are not strictly comparable between countries.</p>
+
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2"/></svg> The timeline — when, and from where?</p>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Defence headlines per day, by country</h2>
+        <span class="hint mono">each bar = one day, stacked by country</span>
+      </div>
+      <div class="tl">
+        <div class="tl-legend" id="tlLegend"></div>
+        <div class="tl-chart" id="tlChart"></div>
+        <div class="tl-axis" id="tlAxis"></div>
+        <div class="tl-slider">
+          <div class="tl-track"></div>
+          <div class="tl-range" id="tlRange"></div>
+          <input type="range" id="tlLo" min="0" max="1" value="0" aria-label="Range start day">
+          <input type="range" id="tlHi" min="0" max="1" value="1" aria-label="Range end day">
+        </div>
+        <div class="tl-sel"><span id="tlSel"></span><button class="tl-reset" id="tlReset" type="button">reset</button></div>
+        <div class="tl-arts" id="tlArts">
+          <div class="tl-arts-h" tabindex="0" role="button" aria-expanded="false"><span class="caret">▶</span><span id="tlArtsLabel"></span></div>
+          <ul class="tl-list" id="tlList"></ul>
+        </div>
+      </div>
+    </section>
+
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="3.8"/><path d="M10 1.5V4M10 16V18.5M1.5 10H4M16 10H18.5M4 4l1.9 1.9M14.1 14.1L16 16M16 4l-1.9 1.9M5.9 14.1L4 16"/></svg> The themes — what is it about?</p>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Topic map</h2>
+        <span class="hint mono">near = similar wording · colour = primary theme · hover for the theme name</span>
+      </div>
+      <div class="mapwrap">
+        <canvas id="map"></canvas>
+        <div id="legend" class="mono"></div>
+        <div id="tip"></div>
+      </div>
+    </section>
+    <p class="section-h">By theme — select one to read its articles (an article can sit under more than one)</p>
+    <section class="grid" id="cards"></section>
+
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8L10 3L17 8M3 12.5L10 7.5L17 12.5M3 17L10 12L17 17"/></svg> The words — what comes up most</p>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Most frequent terms</h2>
+        <span class="hint mono">counted across article titles · a title recurs under each frequent word it uses </span>
+      </div>
+      <div class="freq" id="freq"></div>
+    </section>
+  </main>
+  <div class="weave footer-weave" aria-hidden="true"></div>
+  <footer class="mono">
+    Sources: ERR (Estonia), LRT (Lithuania), LSM (Latvia), English editions.<br>
+    Method: headlines filtered to defence/geopolitics themes, full article bodies fetched,
+    TF-IDF vectorised, reduced with TruncatedSVD (LSA) and laid out with t-SNE so nearby dots
+    share wording. Themes are hand-authored keyword buckets, not clusters: an article is tagged with
+    every bucket its words hit (headline weighted) and coloured by the strongest — so it can appear
+    under more than one theme; hover a dot for its theme name(s). The most frequent terms are tallied across the article titles:
+    with common English stopwords and the Baltic countries' own names and capitals removed, so only
+    the distinctive words surface; word variants (russia/russian, drone/drones) count as one.
+  </footer>
+</div>

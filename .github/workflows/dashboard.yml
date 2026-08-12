@@ -25,8 +25,15 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.14'
-    - name: Install analysis packages
+    - name: Install analysis packages (core — must succeed)
       run: pip install lxml pandas requests beautifulsoup4 html5lib scikit-learn
+    - name: Install embedding extras (optional — page degrades gracefully if this fails)
+      # fastembed + umap-learn power the semantic-embeddings sections of the page.
+      # The committed analysis/emb_cache keeps this cheap: only NEW articles are
+      # embedded each run. continue-on-error so a wheel gap (e.g. numba lagging a new
+      # Python) can't sink the daily publish — render.py then builds a TF-IDF-only page.
+      continue-on-error: true
+      run: pip install fastembed umap-learn
     - name: Build defence/geopolitics topic map from the latest committed data
       run: python topic_analysis.py
     - name: Commit and push the rebuilt dashboard

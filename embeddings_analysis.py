@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 """
-Embeddings prototype for the Baltics/Nordics Monitor — OPT-IN, behind --embed.
+Semantic-embeddings sections of the Baltics Monitor.
 
-This is the DataHarvest-2026 stack (semantic embeddings -> UMAP -> HDBSCAN),
-kept entirely SEPARATE from the shipping TF-IDF/t-SNE/regex-bucket pipeline in
-topic_analysis.py. Nothing here runs unless you pass --embed.
+This is the DataHarvest-2026 stack (semantic embeddings -> UMAP -> HDBSCAN). Its
+sections are now built into the MAIN report (after the keyword-bucket sections),
+alongside — not instead of — the TF-IDF/t-SNE/regex-bucket pipeline. Pass
+--no-embed to skip it (e.g. for a fast local build with no fastembed/umap).
 
 What it does, for TWO text scopes side by side:
   * "content"  — headline + full article body
@@ -28,7 +29,7 @@ MTEB score) is a one-flag swap: --embed-model BAAI/bge-large-en-v1.5 (installs
 sentence-transformers/torch on first use if fastembed lacks the model).
 
 Entry points:
-  * imported by topic_analysis.render() when --embed is set (splices sections in)
+  * render.render() calls build_report_fragment() to splice these sections in
   * or standalone:  venv/Scripts/python.exe embeddings_analysis.py
 """
 import os
@@ -37,9 +38,12 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import HDBSCAN
 
-import topic_analysis as ta
+# The pipeline was split into focused modules; pull what we need from each.
+import config
+import assets
+import pipeline
 
-CACHE_DIR = os.path.join(ta.OUT_DIR, "emb_cache")
+CACHE_DIR = os.path.join(config.OUT_DIR, "emb_cache")
 # Runnable, CI-light default (fastembed/ONNX). bge-large is the higher-quality pick.
 DEFAULT_MODEL = "BAAI/bge-base-en-v1.5"
 SCOPES = ("content", "headline")
@@ -116,7 +120,7 @@ def _cluster(space, n):
 
 
 def _label_clusters(texts, labels):
-    stop = list(TfidfVectorizer(stop_words="english").get_stop_words() | ta.EXTRA_STOP)
+    stop = list(TfidfVectorizer(stop_words="english").get_stop_words() | config.EXTRA_STOP)
     vec = TfidfVectorizer(stop_words=stop, token_pattern=r"[A-Za-z]{3,}", max_features=3000)
     X = vec.fit_transform(texts)
     terms = np.array(vec.get_feature_names_out())
@@ -164,7 +168,7 @@ def build_view(df, scope, model, theme_names):
         pts.append({
             "x": round(float(xy[i, 0]), 3), "y": round(float(xy[i, 1]), 3),
             "k": int(labels[i]), "o": bool(labels[i] == -1),
-            "h": r.headline, "s": ta.SRC_LABEL[r.source], "d": str(r.scrape_date), "u": r.url,
+            "h": r.headline, "s": config.SRC_LABEL[r.source], "d": str(r.scrape_date), "u": r.url,
             "t": int(themes[i]), "nn": neigh, "iso": round(float(iso[i]), 3), "mis": mis,
         })
     clusters = [{"id": int(c), "kw": lab[c], "count": int((labels == c).sum())}
@@ -338,7 +342,7 @@ def build_report_fragment(df, model=DEFAULT_MODEL, theme_names=None):
     'body' and 'theme' (from topic_analysis.analyse)."""
     import json
     if theme_names is None:
-        theme_names = [t[0] for t in ta.THEMES] + [ta.THEME_OTHER]
+        theme_names = [t[0] for t in config.THEMES] + [config.THEME_OTHER]
     views = {sc: build_view(df, sc, model, theme_names) for sc in SCOPES}
     data_js = json.dumps(views, ensure_ascii=False)
     script = _EMB_SCRIPT.replace("__EMB_DATA__", data_js)
@@ -348,14 +352,14 @@ def build_report_fragment(df, model=DEFAULT_MODEL, theme_names=None):
 def _standalone(df, model):
     """Standalone self-contained page (for running this module directly)."""
     css, htmlfrag, script = build_report_fragment(df, model)
-    inner = (f"<style>{ta.CSS}{css}</style>\n<div class=\"shell\"><main>{htmlfrag}</main></div>\n"
+    inner = (f"<style>{assets.CSS}{css}</style>\n<div class=\"shell\"><main>{htmlfrag}</main></div>\n"
              f"<script>{script}</script>")
     page = ("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
             "<title>Baltic Monitor — embeddings prototype</title></head>"
             f"<body>{inner}</body></html>")
-    os.makedirs(ta.OUT_DIR, exist_ok=True)
-    out = os.path.join(ta.OUT_DIR, "embeddings-prototype.html")
+    os.makedirs(config.OUT_DIR, exist_ok=True)
+    out = os.path.join(config.OUT_DIR, "embeddings-prototype.html")
     with open(out, "w", encoding="utf-8") as f:
         f.write(page)
     print(f"[embed] wrote {out} ({len(page)//1024} KB)")
@@ -366,10 +370,10 @@ def main():
     ap = argparse.ArgumentParser(description="Embeddings prototype (standalone)")
     ap.add_argument("--embed-model", default=DEFAULT_MODEL)
     args = ap.parse_args()
-    df_all = ta.load_data()
-    df = ta.filter_themes(df_all)
-    df["body"] = ta.fetch_all(df["url"].tolist())
-    df, _themes, _kw = ta.analyse(df)                 # gives df['theme'] for the audit
+    df_all = pipeline.load_data()
+    df = pipeline.filter_themes(df_all)
+    df["body"] = pipeline.fetch_all(df["url"].tolist())
+    df, _themes, _kw = pipeline.analyse(df)                 # gives df['theme'] for the audit
     _standalone(df, args.embed_model)
 
 

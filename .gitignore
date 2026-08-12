@@ -153,8 +153,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Embeddings prototype (opt-in, --embed) — regenerable build artifacts
-analysis/emb_cache/
-analysis/baltics-monitor-embed.html
-analysis/baltics-monitor-embed-artifact.html
+# emb_cache IS committed now: it holds the semantic vectors keyed by URL, so the
+# daily CI only embeds NEW articles instead of recomputing everything each run.
+# (embeddings are part of the main page — there's no separate -embed file anymore.)
+
+# Standalone-only artifact from `python embeddings_analysis.py` (not the main page)
 analysis/embeddings-prototype.html
