@@ -56,7 +56,7 @@ jobs:
         git rm -r --ignore-unmatch jul_site/files/baltics-monitor content/baltics_monitor >/dev/null 2>&1 || true
         # Place the FULL standalone report as a verbatim static file -> full-screen page
         mkdir -p jul_site/files/content/baltics_monitor
-        cp "$GITHUB_WORKSPACE/analysis/nordics-monitor.html" jul_site/files/content/baltics_monitor/index.html
+        cp "$GITHUB_WORKSPACE/analysis/baltics-monitor.html" jul_site/files/content/baltics_monitor/index.html
         # Build + deploy
         pip install "Nikola[extras]"
         git config user.name "Automated"

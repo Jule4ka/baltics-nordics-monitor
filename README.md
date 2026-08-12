@@ -10,8 +10,9 @@ runs on **GitHub Actions**.
 
 **Live page:** <https://jule4ka.github.io/content/baltics_monitor/>
 
-> ⚠️ **Naming quirk:** the generated files are historically called
-> `nordics-monitor.*`, but this is the **Baltics** monitor. The names are just legacy.
+> ℹ️ **Scope:** today this covers the **Baltics** (hence `baltics-monitor.*`).
+> The repo is named `baltics-nordics-monitor` because the plan is to grow it —
+> Nordics, Central Europe, eventually the whole of cozy little Europe.
 
 ---
 
@@ -39,7 +40,7 @@ key to understanding everything else:
 
 | Repo | Role |
 |---|---|
-| **`Jule4ka/baltics-nordics-monitor`** (this one) | **The engine.** Scrapers, the analysis script, and the daily GitHub Action that produces the page. |
+| **`Jule4ka/baltics-baltics-monitor`** (this one) | **The engine.** Scrapers, the analysis script, and the daily GitHub Action that produces the page. |
 | **`Jule4ka/Jule4ka.github.io`** | **The website.** A [Nikola](https://getnikola.com/) static site (Julia's personal page). The finished monitor is published *into* this repo as one of its pages. |
 
 Every day, the engine repo builds the page and **pushes it into the website repo**,
@@ -71,7 +72,7 @@ Only the **English editions** are scraped.
                                                         ▼
                                             ┌───────────────────────┐
                                             │ analysis/              │
-                                            │  nordics-monitor.html  │  ← the finished report
+                                            │  baltics-monitor.html  │  ← the finished report
                                             └───────────┬───────────┘
                                                         ▼
                         copy into jul_site/files/  +  nikola build + github_deploy
@@ -82,17 +83,17 @@ Only the **English editions** are scraped.
 ## Project structure
 
 ```
-baltics-nordics-monitor/
+baltics-baltics-monitor/
 ├── data/                              # INPUTS (scraped headlines)
 │   ├── <src>-always-updated.csv       #   master archive per source (deduplicated by URL)
 │   └── err_ee/  lrt_lt/  lsm_lv/       #   a timestamped snapshot of every scrape run
 │
 ├── analysis/                          # OUTPUTS (regenerated every run)
-│   ├── nordics-monitor.html           #   the report — full self-contained page (THIS is published)
-│   ├── nordics-monitor-artifact.html  #   content-only variant (no <html>/<head>; for embedding)
-│   ├── nordics-monitor-data.json      #   the computed data behind the page
-│   ├── nordics-monitor-clustered.csv  #   every matched article tagged with its theme(s)
-│   ├── nordics-monitor-embed.html     #   OPT-IN (--embed) — report + the embeddings prototype
+│   ├── baltics-monitor.html           #   the report — full self-contained page (THIS is published)
+│   ├── baltics-monitor-artifact.html  #   content-only variant (no <html>/<head>; for embedding)
+│   ├── baltics-monitor-data.json      #   the computed data behind the page
+│   ├── baltics-monitor-clustered.csv  #   every matched article tagged with its theme(s)
+│   ├── baltics-monitor-embed.html     #   OPT-IN (--embed) — report + the embeddings prototype
 │   └── emb_cache/                     #   OPT-IN — cached embeddings, keyed by URL (incremental)
 │
 ├── err_ee.ipynb  lrt_lt.ipynb  lsm_lv.ipynb   # the three scrapers
@@ -141,7 +142,7 @@ Two of the three are easy; one is not:
    catch-all, so it loses scoring ties to a more specific theme.
 7. **Keyword frequency** — count, across the **headlines**, how many articles mention
    each word (merging variants: russia/russian → russia, drones → drone, …).
-8. **Render** the report to `analysis/nordics-monitor.html` (+ the JSON, the tagged CSV,
+8. **Render** the report to `analysis/baltics-monitor.html` (+ the JSON, the tagged CSV,
    and the content-only artifact variant).
 
 The page is **fully self-contained** — inline CSS/JS, the Baltic map baked in as SVG,
@@ -219,11 +220,11 @@ venv/Scripts/python -m playwright install chromium
 jupyter nbconvert --to notebook --execute err_ee.ipynb --stdout
 jupyter nbconvert --to notebook --execute lrt_lt.ipynb --stdout
 jupyter nbconvert --to notebook --execute lsm_lv.ipynb --stdout
-venv/Scripts/python topic_analysis.py        # writes analysis/nordics-monitor.html
+venv/Scripts/python topic_analysis.py        # writes analysis/baltics-monitor.html
 ```
 
 **Run everything from the repo root** — all paths (`data/`, `analysis/`) are relative to
-it, and that's where CI runs too. Open `analysis/nordics-monitor.html` in a browser to
+it, and that's where CI runs too. Open `analysis/baltics-monitor.html` in a browser to
 preview.
 
 > On Windows, if `scikit-learn` fails to import with an "Application Control policy"

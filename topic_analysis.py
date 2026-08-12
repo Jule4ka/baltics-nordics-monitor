@@ -21,7 +21,7 @@ Pipeline:
      (Canvas topic map) + a data JSON + a clustered CSV.
 
 Run:  venv/Scripts/python.exe topic_analysis.py
-Output: analysis/nordics-monitor.html  (published to jule4ka.github.io/content/baltics_monitor/)
+Output: analysis/baltics-monitor.html  (published to jule4ka.github.io/content/baltics_monitor/)
 """
 import sys, os, re, json, warnings, datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -1012,13 +1012,13 @@ def render(df, themes, keywords, shares, embed=False, embed_model=None):
     inner = f"<style>{CSS}</style>\n{BODY}\n<script>{script}</script>"
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    with open(f"{OUT_DIR}/nordics-monitor.html", "w", encoding="utf-8") as f:
+    with open(f"{OUT_DIR}/baltics-monitor.html", "w", encoding="utf-8") as f:
         f.write(_wrap(inner))
-    with open(f"{OUT_DIR}/nordics-monitor-artifact.html", "w", encoding="utf-8") as f:
+    with open(f"{OUT_DIR}/baltics-monitor-artifact.html", "w", encoding="utf-8") as f:
         f.write(inner)  # content-only, for the Claude Artifact wrapper
-    with open(f"{OUT_DIR}/nordics-monitor-data.json", "w", encoding="utf-8") as f:
+    with open(f"{OUT_DIR}/baltics-monitor-data.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
-    print(f"[render] wrote {OUT_DIR}/nordics-monitor.html ({len(_wrap(inner))//1024} KB, self-contained)")
+    print(f"[render] wrote {OUT_DIR}/baltics-monitor.html ({len(_wrap(inner))//1024} KB, self-contained)")
 
     # --embed: ALSO write a separate augmented report; the shipping files above
     # are left exactly as they are (current thing untouched).
@@ -1030,11 +1030,11 @@ def render(df, themes, keywords, shares, embed=False, embed_model=None):
         body = BODY.replace("</main>", ehtml + "\n  </main>")
         einner = (f"<style>{CSS}{ecss}</style>\n{body}\n<script>{script}</script>"
                   f"\n<script>{escript}</script>")
-        with open(f"{OUT_DIR}/nordics-monitor-embed.html", "w", encoding="utf-8") as f:
+        with open(f"{OUT_DIR}/baltics-monitor-embed.html", "w", encoding="utf-8") as f:
             f.write(_wrap(einner, "Baltic Monitor — with embeddings prototype"))
-        with open(f"{OUT_DIR}/nordics-monitor-embed-artifact.html", "w", encoding="utf-8") as f:
+        with open(f"{OUT_DIR}/baltics-monitor-embed-artifact.html", "w", encoding="utf-8") as f:
             f.write(einner)
-        print(f"[render] wrote {OUT_DIR}/nordics-monitor-embed.html ({len(_wrap(einner))//1024} KB)")
+        print(f"[render] wrote {OUT_DIR}/baltics-monitor-embed.html ({len(_wrap(einner))//1024} KB)")
 
 
 def main():
@@ -1042,7 +1042,7 @@ def main():
     ap = argparse.ArgumentParser(description="Baltics/Nordics Monitor report generator")
     ap.add_argument("--embed", action="store_true",
                     help="ALSO build the experimental embeddings report "
-                         "(nordics-monitor-embed.html); shipping files stay untouched")
+                         "(baltics-monitor-embed.html); shipping files stay untouched")
     ap.add_argument("--embed-model", default=None,
                     help="embedding model id (default: bge-base via fastembed; "
                          "try BAAI/bge-large-en-v1.5)")
@@ -1058,8 +1058,8 @@ def main():
     out = df[["url", "headline", "source", "scrape_date", "theme"]].copy()
     out["theme_name"] = df["theme"].map(lambda i: names[i])
     out["all_themes"] = df["themes"].map(lambda ms: "; ".join(names[i] for i in ms))
-    out.to_csv(f"{OUT_DIR}/nordics-monitor-clustered.csv", index=False, encoding="utf-8")
-    print(f"[done] {OUT_DIR}/ nordics-monitor.html + artifact + data json + clustered csv")
+    out.to_csv(f"{OUT_DIR}/baltics-monitor-clustered.csv", index=False, encoding="utf-8")
+    print(f"[done] {OUT_DIR}/ baltics-monitor.html + artifact + data json + clustered csv")
 
 
 if __name__ == "__main__":
