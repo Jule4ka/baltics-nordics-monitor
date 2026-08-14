@@ -2,10 +2,14 @@
 """
 Semantic-embeddings sections of the Baltics Monitor.
 
-This is the DataHarvest-2026 stack (semantic embeddings -> UMAP -> HDBSCAN). Its
-sections are now built into the MAIN report (after the keyword-bucket sections),
-alongside — not instead of — the TF-IDF/t-SNE/regex-bucket pipeline. Pass
---no-embed to skip it (e.g. for a fast local build with no fastembed/umap).
+Semantic map built on sentence embeddings, shown next to (not instead of) the
+keyword-bucket themes. It's spliced into the MAIN report after those sections.
+Pass --no-embed to skip it (e.g. a fast local build with no fastembed/umap).
+
+NOTE: there is deliberately NO unsupervised clustering here. Discovered clusters
+on ~200 short docs were vague and drifted run-to-run, so the map is coloured by
+the STABLE keyword-bucket theme instead. Embeddings are used for what they're
+actually good at: proximity, isolation, and neighbour agreement.
 
 What it does, for TWO text scopes side by side:
   * "content"  — headline + full article body
@@ -14,14 +18,12 @@ For each scope:
   1. Embed every article into a semantic vector (meaning, not word overlap),
      cached by URL so each run only embeds NEW articles (incremental).
   2. UMAP -> 2D for the map (metric="cosine": compare directions, not distance,
-     because in high dimensions Euclidean distance collapses).
-  3. UMAP -> 5D -> HDBSCAN for density clusters; cluster == -1 are OUTLIERS.
-  4. TF-IDF top terms label each cluster (descriptive, same idea as the main
-     report's keyword labels).
-  5. Cosine nearest-neighbours per article ("related") + an anomaly list
-     (stories that fit no cluster) + a mislabel audit that flags articles whose
-     semantic neighbours mostly carry a DIFFERENT regex theme than the one the
-     buckets assigned.
+     because in high dimensions Euclidean distance collapses). Points are
+     coloured by their keyword-bucket theme.
+  3. Cosine nearest-neighbours per article -> two lists:
+     * anomalies   — the most ISOLATED stories (far from everything else)
+     * mislabels   — stories whose semantic neighbours mostly carry a DIFFERENT
+                     regex theme than the buckets assigned (a bucket-audit).
 
 Model: configurable. Default is a runnable, CI-light BGE base via fastembed
 (ONNX, no torch). BAAI/bge-large-en-v1.5 (the workshop's recommended, higher
@@ -35,8 +37,6 @@ Entry points:
 import os
 import re
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import HDBSCAN
 
 # The pipeline was split into focused modules; pull what we need from each.
 import config
@@ -114,26 +114,6 @@ def _umap(emb, n_components, min_dist):
                 metric="cosine", random_state=42).fit_transform(emb)
 
 
-def _cluster(space, n):
-    mcs = max(5, round(n / 25))                       # ~8 for ~190 docs
-    return HDBSCAN(min_cluster_size=mcs).fit_predict(space)
-
-
-def _label_clusters(texts, labels):
-    stop = list(TfidfVectorizer(stop_words="english").get_stop_words() | config.EXTRA_STOP)
-    vec = TfidfVectorizer(stop_words=stop, token_pattern=r"[A-Za-z]{3,}", max_features=3000)
-    X = vec.fit_transform(texts)
-    terms = np.array(vec.get_feature_names_out())
-    out = {}
-    for c in sorted(set(labels)):
-        if c == -1:
-            continue
-        idx = np.where(labels == c)[0]
-        mean = np.asarray(X[idx].mean(axis=0)).ravel()
-        out[c] = ", ".join(terms[mean.argsort()[::-1][:6]])
-    return out
-
-
 def _neighbors(emb, k=5):
     """Cosine nearest neighbours (emb is unit-normalised, so dot == cosine)."""
     sim = emb @ emb.T
@@ -152,9 +132,7 @@ def build_view(df, scope, model, theme_names):
         texts = df["headline"].fillna("").tolist()
 
     emb = get_embeddings(urls, texts, scope, model)
-    xy = _umap(emb, n_components=2, min_dist=0.1)
-    labels = _cluster(_umap(emb, n_components=5, min_dist=0.0), len(emb))
-    lab = _label_clusters(texts, labels)
+    xy = _umap(emb, n_components=2, min_dist=0.1)      # 2-D map only; no clustering
     nn, iso = _neighbors(emb, 5)
 
     themes = df["theme"].tolist()                     # regex primary theme id per article
@@ -167,15 +145,11 @@ def build_view(df, scope, model, theme_names):
         mis = bool(same <= 1 and len(nb_themes) >= 3)
         pts.append({
             "x": round(float(xy[i, 0]), 3), "y": round(float(xy[i, 1]), 3),
-            "k": int(labels[i]), "o": bool(labels[i] == -1),
             "h": r.headline, "s": config.SRC_LABEL[r.source], "d": str(r.scrape_date), "u": r.url,
             "t": int(themes[i]), "nn": neigh, "iso": round(float(iso[i]), 3), "mis": mis,
         })
-    clusters = [{"id": int(c), "kw": lab[c], "count": int((labels == c).sum())}
-                for c in sorted(lab)]
     return {
-        "scope": scope, "model": model, "points": pts, "clusters": clusters,
-        "nOutliers": int((labels == -1).sum()),
+        "scope": scope, "model": model, "points": pts,
         "nMis": int(sum(p["mis"] for p in pts)),
         "themeNames": theme_names,
     }
@@ -217,14 +191,14 @@ EMB_CSS = """
 """
 
 _EMB_SECTION = """
-    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.2"/><circle cx="14" cy="6" r="2.2"/><circle cx="10" cy="14" r="2.2"/><path d="M7.8 8.2 12 12M12.2 7.2 11 12"/></svg> Experimental — semantic map (embeddings &rarr; UMAP &rarr; HDBSCAN)</p>
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.2"/><circle cx="14" cy="6" r="2.2"/><circle cx="10" cy="14" r="2.2"/><path d="M7.8 8.2 12 12M12.2 7.2 11 12"/></svg> The semantic map — near = similar meaning (embeddings &rarr; UMAP)</p>
     <section class="panel">
       <div class="panel-h">
-        <h2>Semantic clusters &amp; anomalies</h2>
-        <span class="hint mono">near = similar MEANING (not just words) · colour = discovered cluster · grey = outlier</span>
+        <h2>Semantic map &amp; anomalies</h2>
+        <span class="hint mono">near = similar MEANING (not just shared words) · colour = keyword theme</span>
       </div>
       <div style="padding:14px 20px 0">
-        <p class="emb-note"><b>Prototype (--embed).</b> This is the unsupervised DataHarvest stack, shown next to the curated themes above — not a replacement. Two scopes: <b>content</b> embeds headline + body, <b>headline</b> embeds titles only. Clusters and their keywords are <i>discovered</i>, so they drift between runs.</p>
+        <p class="emb-note">A second view of the same articles, laid out by <b>meaning</b> rather than word overlap, and coloured by the same keyword themes as the map above. Two scopes: <b>content</b> embeds headline + body, <b>headline</b> embeds titles only. Below the map: the most <i>isolated</i> stories, and a bucket audit where an article's nearest neighbours mostly carry a different theme.</p>
         <div class="emb-tabs" id="embTabs"></div>
       </div>
       <div class="emb-wrap">
@@ -233,7 +207,7 @@ _EMB_SECTION = """
         <div class="emb-tip" id="embTip"></div>
       </div>
       <div class="emb-anom">
-        <h4 id="embAnomH">Anomalies — stories that fit no cluster</h4>
+        <h4 id="embAnomH">Anomalies — the most isolated stories</h4>
         <ul id="embAnom"></ul>
         <h4 id="embMisH">Possible mislabels — semantic neighbours disagree with the regex theme</h4>
         <ul id="embMis"></ul>
@@ -243,22 +217,24 @@ _EMB_SECTION = """
 
 _EMB_SCRIPT = r"""
 (function(){
-  const EV = __EMB_DATA__;                       // {content:{...}, headline:{...}}
+  const EV = __EMB_DATA__;                       // {content:{...}, headline:{...}, colors, colorsDark}
   const scopes = Object.keys(EV).filter(k=>EV[k] && EV[k].points);
   if(!scopes.length) return;
   const TN = (EV[scopes[0]].themeNames)||[];
-  // cluster colour: evenly spaced hues; outlier = grey. (>3 categories can't be
-  // colour-blind-safe on a scatter — cluster id + keywords ride in tooltip/legend.)
-  const hue = (i,n)=>`hsl(${Math.round(360*i/Math.max(1,n))} 62% 52%)`;
+  const ANOM_N = 20;                             // how many most-isolated stories to list
+  // colour = keyword-bucket theme (same palette as the main map), light/dark aware.
+  const isDark=()=>{const t=document.documentElement.getAttribute('data-theme');
+    return t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);};
+  let COL = isDark()?EV.colorsDark:EV.colors;
   let cur = scopes[0];
-  const hidden = new Set();
+  const hidden = new Set();                       // hidden THEME ids
   const cvs=document.getElementById('embCanvas'), ctx=cvs.getContext('2d');
   const tip=document.getElementById('embTip'), wrap=cvs.parentElement;
-  let P=[], hover=-1, minX,maxX,minY,maxY, colorOf={};
+  let P=[], hover=-1, minX,maxX,minY,maxY;
 
   document.getElementById('embTabs').innerHTML = scopes.map(s=>{
     const v=EV[s]; const lab = s==='content'?'Content (headline + body)':'Headline only';
-    return `<div class="emb-tab${s===cur?' on':''}" data-s="${s}">${lab} · ${v.points.length} · ${v.clusters.length} clusters</div>`;
+    return `<div class="emb-tab${s===cur?' on':''}" data-s="${s}">${lab} · ${v.points.length} stories</div>`;
   }).join('');
   document.querySelectorAll('#embTabs .emb-tab').forEach(t=>{
     t.onclick=()=>{cur=t.dataset.s; hidden.clear();
@@ -267,30 +243,31 @@ _EMB_SCRIPT = r"""
   });
 
   function load(){
-    const v=EV[cur]; const cl=v.clusters;
-    colorOf={}; cl.forEach((c,i)=>colorOf[c.id]=hue(i,cl.length)); colorOf[-1]='#9a8f7c';
+    const v=EV[cur];
     const xs=v.points.map(p=>p.x), ys=v.points.map(p=>p.y);
     minX=Math.min(...xs);maxX=Math.max(...xs);minY=Math.min(...ys);maxY=Math.max(...ys);
     const px=(maxX-minX)*0.06||1, py=(maxY-minY)*0.06||1; minX-=px;maxX+=px;minY-=py;maxY+=py;
-    // legend
-    document.getElementById('embLegend').innerHTML = cl.map(c=>
-      `<div class="emb-leg${hidden.has(c.id)?' off':''}" data-c="${c.id}" tabindex="0">`
-      +`<span class="sw" style="background:${colorOf[c.id]}"></span>`
-      +`<span><b>#${c.id}</b> ${c.kw}</span><span class="lc">${c.count}</span></div>`
-    ).join('') + `<div class="emb-leg" data-c="-1"><span class="sw" style="background:#9a8f7c"></span><span>outliers</span><span class="lc">${v.nOutliers}</span></div>`;
+    // legend = the keyword themes actually present in this scope, by count
+    const cnt={}; v.points.forEach(p=>{cnt[p.t]=(cnt[p.t]||0)+1;});
+    const ids=Object.keys(cnt).map(Number).sort((a,b)=>cnt[b]-cnt[a]);
+    document.getElementById('embLegend').innerHTML = ids.map(id=>
+      `<div class="emb-leg${hidden.has(id)?' off':''}" data-c="${id}" tabindex="0">`
+      +`<span class="sw" style="background:${COL[id]}"></span>`
+      +`<span>${TN[id]||('#'+id)}</span><span class="lc">${cnt[id]}</span></div>`
+    ).join('');
     document.querySelectorAll('#embLegend .emb-leg').forEach(el=>{
       el.onclick=()=>{const id=+el.dataset.c; hidden.has(id)?hidden.delete(id):hidden.add(id);
         el.classList.toggle('off'); draw();};
     });
-    // anomaly list (outliers by isolation) + mislabels
+    // anomalies (most isolated) + mislabels (neighbours disagree with the bucket)
     const li = arr => arr.map(p=>{
       const also = TN[p.t]?`<span class="emb-badge">${TN[p.t]}</span>`:'';
       return `<li><a href="${p.u}" target="_blank" rel="noopener">${also}${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`;
     }).join('');
-    const outs=v.points.filter(p=>p.o).sort((a,b)=>b.iso-a.iso);
-    const miss=v.points.filter(p=>p.mis&&!p.o).sort((a,b)=>b.iso-a.iso);
-    document.getElementById('embAnomH').textContent=`Anomalies — ${outs.length} stories that fit no cluster`;
-    document.getElementById('embAnom').innerHTML = outs.length?li(outs):'<li>none</li>';
+    const anom=v.points.slice().sort((a,b)=>b.iso-a.iso).slice(0,ANOM_N);
+    const miss=v.points.filter(p=>p.mis).sort((a,b)=>b.iso-a.iso);
+    document.getElementById('embAnomH').textContent=`Anomalies — the ${anom.length} most isolated stories`;
+    document.getElementById('embAnom').innerHTML = anom.length?li(anom):'<li>none</li>';
     document.getElementById('embMisH').textContent=`Possible mislabels — ${miss.length} where semantic neighbours disagree with the regex theme`;
     document.getElementById('embMis').innerHTML = miss.length?li(miss):'<li>none</li>';
     layout(); draw();
@@ -309,21 +286,19 @@ _EMB_SCRIPT = r"""
     for(let i=1;i<6;i++){const gx=i/6*w;ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();
       const gy=i/6*h;ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
     const ground=css('--panel');
-    P.forEach((p,i)=>{ if(hidden.has(p.k))return;
-      const r=(i===hover?8:p.o?4:5.5);
+    P.forEach((p,i)=>{ if(hidden.has(p.t))return;
+      const r=(i===hover?8:5.5);
       ctx.beginPath();ctx.arc(p.sx,p.sy,r,0,7);
-      if(p.o){ctx.strokeStyle=colorOf[-1];ctx.lineWidth=1.5;ctx.stroke();}
-      else{ctx.fillStyle=colorOf[p.k];ctx.globalAlpha=i===hover?1:.85;ctx.fill();ctx.globalAlpha=1;
-        ctx.lineWidth=i===hover?2:1.1;ctx.strokeStyle=ground;ctx.stroke();}
+      ctx.fillStyle=COL[p.t]||'#888';ctx.globalAlpha=i===hover?1:.85;ctx.fill();ctx.globalAlpha=1;
+      ctx.lineWidth=i===hover?2:1.1;ctx.strokeStyle=ground;ctx.stroke();
     });
   }
-  function nearest(mx,my){let b=-1,bd=169;P.forEach((p,i)=>{if(hidden.has(p.k))return;
+  function nearest(mx,my){let b=-1,bd=169;P.forEach((p,i)=>{if(hidden.has(p.t))return;
     const d=(p.sx-mx)**2+(p.sy-my)**2;if(d<bd){bd=d;b=i;}});return b;}
   cvs.addEventListener('mousemove',e=>{const rc=cvs.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
     const hh=nearest(mx,my); if(hh!==hover){hover=hh;draw();}
     if(hh>=0){const p=P[hh];cvs.style.cursor='pointer';
-      const kw=p.o?'outlier':('#'+p.k+' '+((EV[cur].clusters.find(c=>c.id===p.k)||{}).kw||''));
-      tip.innerHTML=`<b>${p.h}</b><span class="m">${p.s} · ${p.d}<br>cluster: ${kw}<br>theme: ${TN[p.t]||'—'}${p.mis?' · ⚠ neighbours differ':''}</span>`;
+      tip.innerHTML=`<b>${p.h}</b><span class="m">${p.s} · ${p.d}<br>theme: ${TN[p.t]||'—'} · isolation ${p.iso}${p.mis?'<br>⚠ neighbours mostly a different theme':''}</span>`;
       tip.style.opacity=1; let tx=mx+16,ty=my+16;
       if(tx+tip.offsetWidth>wrap.clientWidth)tx=mx-tip.offsetWidth-16;
       if(ty+tip.offsetHeight>cvs.clientHeight)ty=my-tip.offsetHeight-16;
@@ -332,6 +307,10 @@ _EMB_SCRIPT = r"""
   cvs.addEventListener('mouseleave',()=>{hover=-1;tip.style.opacity=0;draw();});
   cvs.addEventListener('click',()=>{if(hover>=0)window.open(P[hover].u,'_blank','noopener');});
   new ResizeObserver(()=>{layout();draw();}).observe(wrap);
+  // follow the page's light/dark, like the main map
+  const onTheme=()=>{COL=isDark()?EV.colorsDark:EV.colors; load();};
+  matchMedia('(prefers-color-scheme:dark)').addEventListener('change',onTheme);
+  new MutationObserver(onTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   load();
 })();
 """
@@ -343,8 +322,11 @@ def build_report_fragment(df, model=DEFAULT_MODEL, theme_names=None):
     import json
     if theme_names is None:
         theme_names = [t[0] for t in config.THEMES] + [config.THEME_OTHER]
-    views = {sc: build_view(df, sc, model, theme_names) for sc in SCOPES}
-    data_js = json.dumps(views, ensure_ascii=False)
+    payload = {sc: build_view(df, sc, model, theme_names) for sc in SCOPES}
+    # theme palette (same as the main map), so the embed map colours by keyword theme
+    payload["colors"] = config.COLORS_LIGHT
+    payload["colorsDark"] = config.COLORS_DARK
+    data_js = json.dumps(payload, ensure_ascii=False)
     script = _EMB_SCRIPT.replace("__EMB_DATA__", data_js)
     return EMB_CSS, _EMB_SECTION, script
 
