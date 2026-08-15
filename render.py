@@ -10,8 +10,8 @@ in the data:
     <script> report.js  (with __DATA__ replaced by the payload JSON) </script>
     <script> embed js </script>
 
-The embeddings sections (semantic map, clusters, anomalies, mislabel audit) are
-now part of the MAIN page, sitting AFTER the original keyword-bucket sections —
+The embeddings sections (semantic map with HDBSCAN-discovered topics + anomalies)
+are now part of the MAIN page, sitting AFTER the original keyword-bucket sections —
 not a separate file. If the embedding stack isn't installed (fastembed / umap),
 we log a note and fall back to the TF-IDF-only page so a build never hard-fails.
 """
@@ -40,9 +40,8 @@ def _embed_fragment(df, embed_model):
     """
     try:
         import embeddings_analysis as emb
-        names = [t[0] for t in THEMES] + [THEME_OTHER]
-        return emb.build_report_fragment(
-            df, model=embed_model or emb.DEFAULT_MODEL, theme_names=names)
+        # topics are discovered from the embeddings here, independent of the keyword themes
+        return emb.build_report_fragment(df, model=embed_model or emb.DEFAULT_MODEL)
     except Exception as e:
         print(f"[embed] skipped — building TF-IDF-only page ({type(e).__name__}: {e})")
         return None, None, None

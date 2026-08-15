@@ -49,7 +49,10 @@ KEYWORDS = (
     r"warfare|drone|china|chinese|beijing|taiwan|weapon|missile|army|troop|soldier|"
     r"sanction|wagner|zelensky|invasion|espionage|spy|sabotag|cyber|airspace|"
     r"submarine|frigate|warship|warplane|hybrid|mobilis|mobiliz|conscript|"
-    r"deepfake|disinfo|misinform|"
+    r"deepfake|disinfo|misinform|terror|radicali[sz]|extremis|"
+    r"readiness|preparedness|resilience|civil\s+defen[cs]e|shelter|evacuat|"
+    r"naval|navy|tank|migrant|threat|special\s+forces|false.?flag|\bhack|"
+    r"intelligence\s+service|counter.?intelligence|\bcia\b|\bfsb\b|\bgru\b|\bkgb\b|"
     r"artillery|shelling|front[\s-]?line|refugee|border)\w*"
 )
 
@@ -118,13 +121,16 @@ THEMES = [
     ("Russia & Kremlin",   r"russ|kremlin|putin|moscow|wagner|lavrov|medvedev"),
     ("NATO & defence",     r"nato|defen[cs]e|militar|troop|soldier|brigade|deploy|exercise|weapon|"
                            r"missile|artillery|himars|atacms|warship|frigate|submarine|\barmy\b|"
-                           r"rearm|conscript|mobilis|mobiliz"),
+                           r"rearm|conscript|mobilis|mobiliz|readiness|preparedness|resilience|"
+                           r"civil\s+defen[cs]e|shelter|evacuat|naval|navy|\btank|special\s+forces"),
     ("Drones & airspace",  r"drone|airspace|uav|incursion|airport|warplane|aircraft|\bjet\b"),
     ("Border & migration", r"border|migrant|refugee|belarus|frontier|\bfence|smuggl|crossing|barbed"),
     ("Hybrid warfare",
                            r"sabotag|cyber|espionage|\bspy|hybrid|disinfo|deepfake|misinform|"
                            r"propaganda|interfer|meddl|cognitive|influence\s+oper|jamming|\bgps\b|"
-                           r"undersea|\bcable|shadow fleet|provocation|coercion"),
+                           r"undersea|\bcable|shadow fleet|provocation|coercion|"
+                           r"terror|radicali[sz]|extremis|false.?flag|\bhack|counter.?intelligence|"
+                           r"intelligence\s+service|\bcia\b|\bfsb\b|\bgru\b|\bkgb\b"),
     ("China & Indo-Pacific",
                            r"\bchina\b|chinese|beijing|taiwan|xi jinping|indo.?pacific|"
                            r"south china"),

@@ -41,8 +41,8 @@ def main():
                     help="skip the semantic-embeddings sections (faster; needs no "
                          "fastembed/umap). Default: embeddings ARE built into the page.")
     ap.add_argument("--embed-model", default=None,
-                    help="embedding model id (default: bge-base via fastembed; "
-                         "try BAAI/bge-large-en-v1.5)")
+                    help="embedding model id (default: bge-large via fastembed; "
+                         "pass e.g. BAAI/bge-base-en-v1.5 for a lighter run)")
     args = ap.parse_args()
 
     df_all = load_data()
