@@ -98,6 +98,8 @@ def find_edits():
     dedupes by URL, so BOTH versions survive as distinct rows. Group by that id,
     keep articles seen under >1 distinct headline, and return them newest-change-
     first, each with its ordered headline versions and when each was first captured.
+    Only DEFENCE/geopolitics stories are reported (an id counts if ANY of its headline
+    versions hits KEYWORDS) — headline edits on unrelated news aren't interesting here.
     (Only ERR exposes a stable per-article id, so only ERR edits are detected.)"""
     frames = []
     for src, path in FILES.items():
@@ -114,8 +116,13 @@ def find_edits():
     df = pd.concat(frames, ignore_index=True).dropna(subset=["aid", "url", "headline"])
     when = "scrape_datetime" if "scrape_datetime" in df.columns else "scrape_date"
     df = df.sort_values(when).drop_duplicates("url")          # first-seen row per URL
+    # keep only ids that are defence-related in at least one of their headline versions
+    matched = df["headline"].str.contains(KEYWORDS, case=False, na=False, regex=True)
+    defence_ids = set(df.loc[matched, "aid"])
     edits = []
     for aid, g in df.groupby("aid"):
+        if aid not in defence_ids:                            # skip non-defence stories
+            continue
         g = g.sort_values(when)
         versions, seen, last_raw = [], set(), ""
         for r in g.itertuples():
