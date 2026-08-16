@@ -270,10 +270,46 @@ def _ctfidf_labels(texts, labels, topn=3):
     A = X.sum() / max(1, len(ids))                              # avg words per class
     idf = np.log(1.0 + A / np.clip(X.sum(axis=0), 1, None))     # rarer-across-classes -> bigger
     ctfidf = tf * idf
-    out = {}
+
+    # Per-cluster ranked candidates (morphological variants collapsed WITHIN a cluster).
+    cand = {}
     for row, cid in enumerate(ids):
-        ranked = [vocab[j] for j in np.argsort(-ctfidf[row]) if ctfidf[row, j] > 0][:12]
-        out[cid] = _dedupe_terms(ranked, topn)                 # concise, non-redundant
+        ranked = [vocab[j] for j in np.argsort(-ctfidf[row]) if ctfidf[row, j] > 0][:20]
+        cand[cid] = _dedupe_terms(ranked, 8)
+
+    # Keep the MEANING but still tell look-alike clusters apart: build each label as
+    # a "theme · facet" pair — the theme is the cluster's TOP distinctive term (kept
+    # even when shared with other clusters), and the facet is its best term that is
+    # DISTINCT to it. So two related clusters read as e.g. 'defence · systems' vs
+    # 'drone · airspace' — each keeps its own most-distinctive word and the facet
+    # carries the difference, rather than one being stripped of meaning.
+    from collections import Counter
+    share = Counter(t for cid in ids for t in cand[cid][:4])       # how many clusters top-rank each term
+
+    def stems(t):
+        return {w[:4] for w in t.split()}
+
+    out = {}
+    used_facets = set()
+    for cid in ids:
+        terms = cand[cid]
+        theme = terms[0]                                  # top term — kept, shared or not
+        tstem = stems(theme)
+        # facet: prefer a term UNIQUE to this cluster and not already used as a facet
+        facet, backup = None, None
+        for t in terms[1:]:
+            s = stems(t)
+            if s & tstem:
+                continue
+            backup = backup or t
+            if share[t] == 1 and not (s & used_facets):
+                facet = t
+                break
+        facet = facet or backup
+        label = [theme] + ([facet] if facet and topn >= 2 else [])
+        if facet:
+            used_facets |= stems(facet)
+        out[cid] = label[:topn]
     return out
 
 
