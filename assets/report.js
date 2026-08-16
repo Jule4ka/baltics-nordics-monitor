@@ -153,6 +153,7 @@ const THEME_LABEL = {}; (D.themes||[]).forEach(t=>THEME_LABEL[t.id]=t.label);   
 
 const cvs = document.getElementById('map'), ctx = cvs.getContext('2d');
 const tip = document.getElementById('tip'), wrap = cvs.parentElement;
+// start with every theme visible; click a legend entry to toggle it off/on
 const hidden = new Set();
 let pts = [], labelPos = [], hover = -1, anim = 1;
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -160,11 +161,25 @@ const isDark = () => { const t = document.documentElement.getAttribute('data-the
   return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches); };
 let C = isDark() ? D.colorsDark : D.colors;      // theme-aware categorical palette
 
-// header stats
+// header stats — the numeric three, then an "Updated" tile: the DATE in the same
+// number font, plus an info icon that reveals the exact time (seconds + timezone)
+// on hover or click.
+const gDate = (D.generated||'—').split(' ')[0];    // "YYYY-MM-DD"
+const gFull = D.generatedFull || D.generated || '';
+const popLines = gFull.split(' · ').map(p=>`<span class="ip-l">${p}</span>`).join('');
+const info = `<span class="stat-info"><button type="button" class="info-btn" aria-label="Show exact update time">`
+  + `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7"/><path d="M8 7v4"/><circle cx="8" cy="4.6" r=".9" fill="currentColor" stroke="none"/></svg>`
+  + `</button><span class="info-pop mono" role="tooltip">${popLines}</span></span>`;
 document.getElementById('stats').innerHTML = [
-  [D.points.length,'Articles'], [D.sources,'Sources'],
-  [D.themes.length,'Themes'], [D.generated,'Updated']
-].map(s=>`<div class="stat"><div class="n">${s[0]}</div><div class="l">${s[1]}</div></div>`).join('');
+  [D.points.length,'Articles',''], [D.sources,'Sources',''],
+  [D.themes.length,'Themes',''], [`${gDate}${info}`,'Updated','stat-meta']
+].map(s=>`<div class="stat ${s[2]}"><div class="n">${s[0]}</div><div class="l">${s[1]}</div></div>`).join('');
+// click the info icon to pin the tooltip open (hover works on its own; this is for touch)
+document.querySelectorAll('#stats .info-btn').forEach(b=>{
+  b.onclick=e=>{ e.stopPropagation(); b.closest('.stat-info').classList.toggle('open'); };
+});
+document.addEventListener('click',()=>document.querySelectorAll('#stats .stat-info.open')
+  .forEach(el=>el.classList.remove('open')));
 
 // legend — toggle themes on/off; rebuilt on theme change so swatches track colours
 const leg = document.getElementById('legend');
@@ -223,7 +238,58 @@ function renderFreq(){
     row.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
   });
 }
-renderLegend(); renderCards(); renderFreq();
+// make an absolutely-positioned overlay draggable so it never permanently hides dots.
+// a real drag (moved past a few px) suppresses the click that would otherwise toggle.
+function makeDraggable(el){
+  let sx, sy, ox, oy, pid, down = false, dragging = false, moved = false;
+  el.style.cursor = 'grab'; el.title = 'drag to move';
+  el.addEventListener('pointerdown', e => {
+    down = true; dragging = false; moved = false; pid = e.pointerId;
+    sx = e.clientX; sy = e.clientY;
+    const r = el.getBoundingClientRect(), pr = el.offsetParent.getBoundingClientRect();
+    ox = r.left - pr.left; oy = r.top - pr.top;
+  });
+  el.addEventListener('pointermove', e => {
+    if(!down) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if(!dragging && Math.abs(dx) + Math.abs(dy) > 4){    // only NOW does it become a drag
+      dragging = true; moved = true;
+      el.style.right = 'auto'; el.style.left = ox + 'px'; el.style.top = oy + 'px';
+      el.style.cursor = 'grabbing'; el.setPointerCapture(pid);
+    }
+    if(dragging){ el.style.left = (ox + dx) + 'px'; el.style.top = (oy + dy) + 'px'; }
+  });
+  const end = () => { down = false; if(dragging){ el.style.cursor = 'grab';
+    try{ el.releasePointerCapture(pid); }catch(_){} } dragging = false; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('click', e => { if(moved){ e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+}
+
+// edits — ERR stories whose headline was revised after publishing (newest change first).
+// Each item shows the version history: the first-seen headline, then each later wording,
+// with the date it was first captured. Hidden entirely when nothing has been edited.
+function renderEdits(){
+  const E = D.edits || [];
+  const panel = document.getElementById('editsPanel'), head = document.getElementById('editsH');
+  const box = document.getElementById('edits');
+  if(!box) return;
+  if(!E.length){ if(panel) panel.style.display='none'; if(head) head.style.display='none'; return; }
+  box.innerHTML = E.map(e=>{
+    const vs = e.versions.map((v,i)=>{
+      const last = i===e.versions.length-1;
+      const mark = i ? '↳' : '•';
+      return `<li class="ed-v ${last?'ed-cur':'ed-old'}"><span class="ed-mark">${mark}</span>`
+        + `<a href="${v.u}" target="_blank" rel="noopener">${v.h}</a>`
+        + `<span class="ed-when mono">${v.t}</span></li>`;   // 'DD Mon HH:MM CET/CEST'
+    }).join('');
+    return `<div class="ed-item"><div class="ed-meta mono"><span class="ed-src">${e.source}</span>`
+      + `<span class="ed-n">${e.n} versions</span></div><ul class="ed-vers">${vs}</ul></div>`;
+  }).join('');
+}
+
+renderLegend(); renderCards(); renderFreq(); renderEdits();
+makeDraggable(leg);
 
 // bounds
 const xs=D.points.map(p=>p.x), ys=D.points.map(p=>p.y);
@@ -296,3 +362,44 @@ else{anim=0;const t0=performance.now();
 function onTheme(){ C = isDark() ? D.colorsDark : D.colors; renderLegend(); renderCards(); draw(); }
 new MutationObserver(onTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',onTheme);
+
+// ── collapsible sections ─────────────────────────────────────────────────────
+// Each `.section-h` becomes a toggle; everything between it and the next
+// `.section-h` is wrapped into a body that starts collapsed, so the page opens as
+// a list of sections you expand on demand (numbers, timeline, themes, words, …).
+// Canvases (the maps) redraw on expand via their ResizeObserver; we also fire a
+// resize event as a belt-and-suspenders for anything measuring width.
+(function(){
+  const main = document.querySelector('main');
+  if(!main) return;
+  const heads = [...main.children].filter(el => el.classList.contains('section-h'));
+  heads.forEach(h=>{
+    const body = document.createElement('div');
+    body.className = 'act-body';
+    let el = h.nextElementSibling;
+    while(el && !el.classList.contains('section-h')){
+      const next = el.nextElementSibling;
+      body.appendChild(el);
+      el = next;
+    }
+    h.insertAdjacentElement('afterend', body);
+    const caret = document.createElement('span');
+    caret.className = 'act-caret'; caret.setAttribute('aria-hidden','true');
+    caret.textContent = '▸';
+    h.insertBefore(caret, h.firstChild);
+    h.classList.add('act-h');
+    h.setAttribute('role','button');
+    h.setAttribute('tabindex','0');
+    h.setAttribute('aria-expanded','false');
+    const toggle = ()=>{
+      const open = body.classList.toggle('open');
+      h.classList.toggle('open', open);
+      h.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if(open) window.dispatchEvent(new Event('resize'));   // nudge canvases to redraw
+    };
+    h.addEventListener('click', toggle);
+    h.addEventListener('keydown', e=>{
+      if(e.key==='Enter' || e.key===' '){ e.preventDefault(); toggle(); }
+    });
+  });
+})();

@@ -8,8 +8,9 @@ permissions:
 on:
   workflow_dispatch:
   schedule:
-    # every 3 hours
-    - cron: '0 */3 * * *'
+    # every 2 hours, on even hours (00,02,...,22 UTC). The dashboard runs only on
+    # ODD hours (see dashboard.yml), so a scrape and a build never fire together.
+    - cron: '0 */2 * * *'
 
 # If a scrape is still running when the next one fires, let it finish first.
 concurrency:
@@ -31,11 +32,11 @@ jobs:
         pip install jupyter lxml pandas requests beautifulsoup4 html5lib playwright playwright-stealth
         playwright install --with-deps chromium
     - name: Scrape LRT (Lithuania)
-      run: jupyter nbconvert --to notebook --execute "lrt_lt.ipynb" --stdout
+      run: jupyter nbconvert --to notebook --execute "scrapers/lrt_lt.ipynb" --stdout
     - name: Scrape LSM (Latvia)
-      run: jupyter nbconvert --to notebook --execute "lsm_lv.ipynb" --stdout
+      run: jupyter nbconvert --to notebook --execute "scrapers/lsm_lv.ipynb" --stdout
     - name: Scrape ERR (Estonia)
-      run: jupyter nbconvert --to notebook --execute "err_ee.ipynb" --stdout
+      run: jupyter nbconvert --to notebook --execute "scrapers/err_ee.ipynb" --stdout
     - name: Commit and push scraped data
       run: |-
         git config user.name "Automated"

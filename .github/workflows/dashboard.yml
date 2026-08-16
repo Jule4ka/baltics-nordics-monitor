@@ -1,6 +1,6 @@
 name: dashboard
 
-# Rebuild and publish the report once a day from whatever data the scrape job
+# Rebuild and publish the report twice a day from whatever data the scrape job
 # (scrape.yml) has committed. This job does NOT scrape.
 permissions:
   contents: write
@@ -8,8 +8,10 @@ permissions:
 on:
   workflow_dispatch:
   schedule:
-    # once a day, 05:30 UTC (offset from the scrape cron so they don't collide)
-    - cron: '30 5 * * *'
+    # Twice a day, on ODD hours so a build never coincides with a scrape
+    # (scrape.yml fires on even hours). Times are UTC; Baltic local = UTC+2/+3.
+    - cron: '0 1 * * *'    # night      (~03:00-04:00 Baltic time)
+    - cron: '0 13 * * *'   # midday/pm  (~15:00-16:00 Baltic time)
 
 concurrency:
   group: dashboard

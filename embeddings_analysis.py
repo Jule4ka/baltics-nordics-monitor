@@ -11,10 +11,7 @@ here are DISCOVERED from the embeddings themselves (HDBSCAN), not the regex
 buckets, and named semantically from each cluster's own most distinctive terms
 (class-based TF-IDF). Colour = discovered cluster, not keyword theme.
 
-What it does, for TWO text scopes side by side:
-  * "content"  — headline + full article body
-  * "headline" — headline only
-For each scope:
+What it does, for the "content" scope — headline + full article body:
   1. Embed every article into a semantic vector (meaning, not word overlap),
      cached by URL so each run only embeds NEW articles (incremental).
   2. UMAP -> low-D for clustering + UMAP -> 2D for the map (metric="cosine":
@@ -49,7 +46,7 @@ CACHE_DIR = os.path.join(config.OUT_DIR, "emb_cache")
 # Higher-quality proximity: bge-large (still fastembed/ONNX, no torch). Its cache
 # file is keyed by model name, so switching models never clashes with old vectors.
 DEFAULT_MODEL = "BAAI/bge-large-en-v1.5"
-SCOPES = ("content", "headline")
+SCOPES = ("content",)
 
 
 # ── embedding (incremental, cached by URL) ──────────────────────────────────
@@ -211,7 +208,11 @@ def _cluster(emb):
     if n < 12:
         return np.zeros(n, dtype=int)                  # too few docs to cluster
     red = _umap(emb, n_components=min(5, n - 2), min_dist=0.0)
-    mcs = max(5, n // 25)                              # ~4-10 topics on a ~150-250 doc corpus
+    # Defence/geopolitics feeds are topically narrow, so most stories pile into one
+    # dense mass. A larger min_cluster_size lets excess-of-mass keep that whole blob
+    # as a single cluster (n//25 gave just 2 topics on ~260 docs); a smaller floor
+    # tips it past that cliff and the mass splits into ~10-15 readable sub-topics.
+    mcs = max(6, n // 30)                              # ~10-15 topics on a ~150-260 doc corpus
     labels = HDBSCAN(min_cluster_size=mcs, min_samples=1,
                      metric="euclidean").fit_predict(red)
     return labels
@@ -415,7 +416,7 @@ EMB_CSS = """
 .tone-key .tk-pos{background:#d03b3b;}
 :root[data-theme="dark"] .tone-key .tk-neg{background:#3987e5;}
 :root[data-theme="dark"] .tone-key .tk-mid{background:#383835;}
-.tone-sub{margin:0 0 12px;font-size:12px;color:var(--muted);max-width:70ch;line-height:1.5;}
+.tone-sub{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;}
 .tone-line{display:block;width:100%;height:56px;margin:0 0 6px;overflow:visible;}
 .tone-heat{display:grid;gap:2px;overflow-x:auto;font-size:11px;}
 .tone-heat .th-row{display:grid;grid-template-columns:var(--labw,150px) 1fr;gap:6px;align-items:center;}
@@ -439,7 +440,7 @@ _EMB_SECTION = """
         <span class="hint mono">topics DISCOVERED from the text, independent of the keyword themes above</span>
       </div>
       <div style="padding:14px 20px 0">
-        <p class="emb-note">Built from scratch from the article <b>embeddings</b> (BGE-large), <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Two scopes: <b>content</b> embeds headline + body, <b>headline</b> embeds titles only. Genuinely off-topic stories fall out as <i>Unclustered</i>.</p>
+        <p class="emb-note">Built from scratch from the article <b>embeddings</b> (BGE-large), <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Embeds each story's <b>headline + body</b>. Genuinely off-topic stories fall out as <i>Unclustered</i>.</p>
         <div class="emb-tabs" id="embTabs"></div>
       </div>
       <div class="emb-wrap">
@@ -464,28 +465,61 @@ _EMB_SECTION = """
 
 _EMB_SCRIPT = r"""
 (function(){
-  const EV = __EMB_DATA__;                       // {content:{points,clusters}, headline:{...}}
+  const EV = __EMB_DATA__;                       // {content:{points,clusters,...}}
   const scopes = Object.keys(EV).filter(k=>EV[k] && EV[k].points);
   if(!scopes.length) return;
   const ANOM_N = 20;                             // how many most-isolated stories to list
   const isDark=()=>{const t=document.documentElement.getAttribute('data-theme');
     return t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);};
   let cur = scopes[0];
-  const hidden = new Set();                       // hidden CLUSTER ids
+  // start with every cluster visible; click a legend entry to toggle it off/on
+  const hidden = new Set();                         // hidden CLUSTER ids
   let CL=[], COL=[], NAME=[];                     // per-scope clusters / colour map / label map
   const cvs=document.getElementById('embCanvas'), ctx=cvs.getContext('2d');
   const tip=document.getElementById('embTip'), wrap=cvs.parentElement;
   let P=[], hover=-1, minX,maxX,minY,maxY;
 
-  document.getElementById('embTabs').innerHTML = scopes.map(s=>{
-    const v=EV[s]; const lab = s==='content'?'Content (headline + body)':'Headline only';
-    return `<div class="emb-tab${s===cur?' on':''}" data-s="${s}">${lab} · ${v.points.length} stories</div>`;
-  }).join('');
-  document.querySelectorAll('#embTabs .emb-tab').forEach(t=>{
-    t.onclick=()=>{cur=t.dataset.s; hidden.clear();
-      document.querySelectorAll('#embTabs .emb-tab').forEach(x=>x.classList.toggle('on',x.dataset.s===cur));
-      load(); };
-  });
+  // make the legend draggable so it never permanently hides dots; a real drag
+  // (moved past a few px) suppresses the click that would otherwise toggle a cluster.
+  function makeDraggable(el){
+    let sx,sy,ox,oy,pid,down=false,dragging=false,moved=false;
+    el.style.cursor='grab'; el.title='drag to move';
+    el.addEventListener('pointerdown',e=>{
+      down=true; dragging=false; moved=false; pid=e.pointerId;
+      sx=e.clientX; sy=e.clientY;
+      const r=el.getBoundingClientRect(), pr=el.offsetParent.getBoundingClientRect();
+      ox=r.left-pr.left; oy=r.top-pr.top;
+    });
+    el.addEventListener('pointermove',e=>{
+      if(!down)return;
+      const dx=e.clientX-sx, dy=e.clientY-sy;
+      if(!dragging && Math.abs(dx)+Math.abs(dy)>4){        // only NOW does it become a drag
+        dragging=true; moved=true;
+        el.style.right='auto'; el.style.left=ox+'px'; el.style.top=oy+'px';
+        el.style.cursor='grabbing'; el.setPointerCapture(pid);
+      }
+      if(dragging){ el.style.left=(ox+dx)+'px'; el.style.top=(oy+dy)+'px'; }
+    });
+    const end=()=>{down=false; if(dragging){el.style.cursor='grab';
+      try{el.releasePointerCapture(pid);}catch(_){}} dragging=false;};
+    el.addEventListener('pointerup',end);
+    el.addEventListener('pointercancel',end);
+    el.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();moved=false;}},true);
+  }
+  makeDraggable(document.getElementById('embLegend'));
+
+  // only show the scope switcher when there's more than one scope
+  if(scopes.length>1){
+    document.getElementById('embTabs').innerHTML = scopes.map(s=>{
+      const v=EV[s]; const lab = s==='content'?'Content (headline + body)':'Headline only';
+      return `<div class="emb-tab${s===cur?' on':''}" data-s="${s}">${lab} · ${v.points.length} stories</div>`;
+    }).join('');
+    document.querySelectorAll('#embTabs .emb-tab').forEach(t=>{
+      t.onclick=()=>{cur=t.dataset.s; hidden.clear();
+        document.querySelectorAll('#embTabs .emb-tab').forEach(x=>x.classList.toggle('on',x.dataset.s===cur));
+        load(); };
+    });
+  }
 
   function refreshColors(){
     const d=isDark();

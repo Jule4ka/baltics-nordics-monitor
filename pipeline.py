@@ -53,8 +53,85 @@ def load_data():
         d["headline"] = d["headline"].map(fix_mojibake).str.replace("�", " ", regex=False).str.strip()
         frames.append(d[["url", "headline", "scrape_date", "source"]])
     df = pd.concat(frames, ignore_index=True)
+    # Dedupe on URL only: this drops exact repeats but KEEPS re-slugged copies of a
+    # story whose headline ERR edited (same numeric id, new slug) — those edits are
+    # editorially interesting and we want to see them as distinct rows.
     df = df.dropna(subset=["url", "headline"]).drop_duplicates("url").reset_index(drop=True)
     return df
+
+
+def _now_ams():
+    """(short, full) Amsterdam-time stamps for the SAME instant (DST-aware).
+      short: 'YYYY-MM-DD HH:MM Amsterdam'  (for the header tile)
+      full : 'YYYY-MM-DD HH:MM:SS CEST (UTC+02:00) · Europe/Amsterdam'  (for the tooltip)
+    Falls back to UTC if zoneinfo is unavailable."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        a = now.astimezone(ZoneInfo("Europe/Amsterdam"))
+        off = a.strftime("%z")                                # +0200
+        off = off[:3] + ":" + off[3:] if len(off) == 5 else off
+        short = a.strftime("%Y-%m-%d %H:%M Amsterdam")
+        full = f"{a.strftime('%Y-%m-%d %H:%M:%S')} {a.strftime('%Z')} (UTC{off}) · Europe/Amsterdam"
+        return short, full
+    except Exception:
+        s = now.strftime("%Y-%m-%d %H:%M UTC")
+        return s, now.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _fmt_ams(dt_str):
+    """A UTC 'YYYY-MM-DD_HH.MM.SS' scrape stamp -> 'DD Mon HH:MM' in Amsterdam time
+    (DST-aware). Scrapes run in CI on a UTC clock, so the raw stamp is UTC; the
+    'Amsterdam time' label lives in the section caption. Falls back to the date."""
+    try:
+        from zoneinfo import ZoneInfo
+        dt = datetime.datetime.strptime(str(dt_str), "%Y-%m-%d_%H.%M.%S")
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.astimezone(ZoneInfo("Europe/Amsterdam")).strftime("%d %b %H:%M")
+    except Exception:
+        return str(dt_str)[:10]
+
+
+def find_edits():
+    """Same story, changed headline. ERR re-slugs a URL when it edits a headline
+    while keeping the numeric article id (news.err.ee/<id>/<slug>); load_data
+    dedupes by URL, so BOTH versions survive as distinct rows. Group by that id,
+    keep articles seen under >1 distinct headline, and return them newest-change-
+    first, each with its ordered headline versions and when each was first captured.
+    (Only ERR exposes a stable per-article id, so only ERR edits are detected.)"""
+    frames = []
+    for src, path in FILES.items():
+        try:
+            d = pd.read_csv(path, encoding="utf-8")
+        except Exception:
+            continue
+        d["source"] = src
+        d["headline"] = d["headline"].map(fix_mojibake).str.replace("�", " ", regex=False).str.strip()
+        d["aid"] = d["url"].str.extract(r"news\.err\.ee/(\d+)")[0] if src == "err_ee" else None
+        frames.append(d)
+    if not frames:
+        return []
+    df = pd.concat(frames, ignore_index=True).dropna(subset=["aid", "url", "headline"])
+    when = "scrape_datetime" if "scrape_datetime" in df.columns else "scrape_date"
+    df = df.sort_values(when).drop_duplicates("url")          # first-seen row per URL
+    edits = []
+    for aid, g in df.groupby("aid"):
+        g = g.sort_values(when)
+        versions, seen, last_raw = [], set(), ""
+        for r in g.itertuples():
+            if r.headline in seen:
+                continue
+            seen.add(r.headline)
+            last_raw = str(getattr(r, when))                  # raw UTC stamp, sortable
+            versions.append({"h": r.headline, "u": r.url, "d": str(r.scrape_date),
+                             "t": _fmt_ams(getattr(r, when))})   # 'DD Mon HH:MM' Amsterdam
+        if len(versions) < 2:                                 # unchanged -> not an edit
+            continue
+        edits.append({"id": str(aid), "source": SRC_LABEL.get(g.iloc[0]["source"], ""),
+                      "n": len(versions), "versions": versions, "last": last_raw})
+    edits.sort(key=lambda e: e["last"], reverse=True)         # newest change first (raw UTC)
+    print(f"[edits] {len(edits)} article(s) had their headline revised after publishing")
+    return edits
 
 
 def filter_themes(df):
@@ -210,11 +287,14 @@ def build_payload(df, themes, keywords, shares):
     d0 = [s["d0"] for s in shares if s["d0"]]
     d1 = [s["d1"] for s in shares if s["d1"]]
     coverage = {"from": min(d0) if d0 else "", "to": max(d1) if d1 else ""}
+    gen_short, gen_full = _now_ams()
     return {
-        "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated": gen_short,
+        "generatedFull": gen_full,
         "sources": len(df["source"].unique()),
         "themes": themes, "points": points, "keywords": keywords,
         "colors": COLORS_LIGHT, "colorsDark": COLORS_DARK,
         "shares": shares, "map": BALTIC_MAP, "coverage": coverage,
         "homes": {SRC_CODE[s]: SRC_HOME[s] for s in SRC_HOME},
+        "edits": find_edits(),
     }

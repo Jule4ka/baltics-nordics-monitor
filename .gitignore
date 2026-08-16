@@ -159,3 +159,7 @@ cython_debug/
 
 # Standalone-only artifact from `python embeddings_analysis.py` (not the main page)
 analysis/embeddings-prototype.html
+
+# LSM scraper debug dumps (created only on a Cloudflare failure)
+scrapers/lsm_debug.html
+scrapers/lsm_debug.png

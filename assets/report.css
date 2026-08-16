@@ -35,7 +35,9 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   background:var(--gold);
   -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;
           mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;}
-.shell{max-width:1180px;margin:0 auto;padding:0 22px;position:relative;z-index:1;}
+.shell{max-width:min(1600px,95vw);margin:0 auto;padding:0 22px;position:relative;z-index:1;}
+/* explanatory notes span the full width (like the "Read with care" note) */
+.lede,.note,.emb-note,.tone-sub,footer{max-width:none;}
 header{margin:24px 0 0;padding:40px 40px 30px;border:3px solid var(--gold);border-radius:9px;
   background:var(--panel);color:var(--ink);position:relative;overflow:hidden;
   box-shadow:var(--shadow);outline:2px solid var(--accent);outline-offset:3px;}
@@ -59,6 +61,25 @@ h1{font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Geo
 .stat:last-child{border-right:0}
 .stat .n{font-size:29px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--accent);}
 .stat .l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-top:3px;}
+/* the "Updated" tile shows the DATE in the same number font, a touch smaller so the
+   longer string fits, with an info icon that reveals the exact time on hover/click */
+.stat-meta .n{font-size:20px;white-space:nowrap;display:flex;align-items:center;gap:6px;}
+.stat-info{position:relative;display:inline-flex;}
+.info-btn{display:inline-flex;padding:0;border:0;background:none;cursor:pointer;color:var(--faint);
+  line-height:0;border-radius:50%;}
+.info-btn:hover,.info-btn:focus-visible{color:var(--accent);outline:none;}
+.info-btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;}
+/* right-anchored (Updated is the last tile) so the popup never runs past the frame;
+   the timestamp sits on two lines: date/time, then the timezone name */
+.info-pop{position:absolute;top:calc(100% + 7px);right:0;z-index:8;text-align:right;
+  background:var(--ink);color:var(--bg);padding:7px 10px;border-radius:7px;
+  font-size:11.5px;font-weight:500;letter-spacing:0;box-shadow:0 6px 20px rgba(0,0,0,.28);
+  opacity:0;visibility:hidden;transition:opacity .12s;pointer-events:none;}
+.info-pop .ip-l{display:block;white-space:nowrap;}
+.info-pop .ip-l+.ip-l{margin-top:2px;color:color-mix(in srgb,var(--bg) 72%,var(--muted));}
+.info-pop::before{content:"";position:absolute;bottom:100%;right:8px;
+  border:5px solid transparent;border-bottom-color:var(--ink);}
+.stat-info:hover .info-pop,.stat-info.open .info-pop{opacity:1;visibility:visible;}
 main{padding:30px 0 10px;}
 .panel{background:var(--panel);border:3px solid var(--gold);border-radius:6px;
   box-shadow:var(--shadow);overflow:hidden;outline:2px solid var(--accent);outline-offset:3px;
@@ -89,6 +110,20 @@ main{padding:30px 0 10px;}
   color:var(--muted);font-weight:700;display:flex;align-items:center;gap:13px;}
 .section-h::after{content:"";flex:1;height:2px;margin-left:6px;
   background:linear-gradient(90deg,var(--gold),color-mix(in srgb,var(--gold) 20%,transparent) 70%,transparent);}
+/* collapsible sections: each .section-h is a toggle; its body is hidden until opened */
+.section-h.act-h{cursor:pointer;user-select:none;}
+.section-h.act-h:hover{color:var(--accent);}
+.section-h.act-h:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px;}
+.act-caret{flex:0 0 auto;font-size:12px;color:var(--gold);transition:transform .15s;
+  transform:rotate(0deg);}
+.section-h.act-h.open .act-caret{transform:rotate(90deg);}
+.act-body{display:none;}
+.act-body.open{display:block;}
+/* sub-header inside a section body (e.g. "By theme") — a lighter divider, not a toggle */
+.sub-h{margin:24px 0 12px;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);font-weight:700;display:flex;align-items:center;gap:10px;}
+.sub-h::after{content:"";flex:1;height:1px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 55%,transparent),transparent 80%);}
 .sec-sign{width:32px;height:32px;flex:0 0 auto;color:var(--accent);padding:4px;
   background:color-mix(in srgb,var(--gold) 26%,var(--panel));
   border:2px solid var(--gold);border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.12);}
@@ -189,6 +224,26 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
 .freq-arts .src{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
   color:var(--faint);margin-top:2px;}
 @media (max-width:560px){.freq-arts{padding-left:0;}}
+
+/* edits — ERR stories whose headline was revised after publishing (version history) */
+.edits{padding:14px 22px 20px;display:flex;flex-direction:column;gap:12px;}
+.ed-item{border:1px solid var(--border2);border-radius:8px;padding:11px 14px;
+  background:color-mix(in srgb,var(--gold) 8%,var(--panel));}
+.ed-meta{display:flex;gap:10px;align-items:center;margin-bottom:7px;
+  font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);}
+.ed-meta .ed-src{color:var(--muted);font-weight:600;}
+.ed-meta .ed-n{margin-left:auto;padding:1px 7px;border-radius:20px;
+  background:var(--border2);color:var(--muted);}
+.ed-vers{list-style:none;margin:0;padding:0;}
+.ed-v{display:grid;grid-template-columns:16px 1fr auto;align-items:baseline;gap:9px;
+  padding:4px 0;font-size:13.5px;line-height:1.4;}
+.ed-mark{color:var(--gold);text-align:center;font-weight:700;}
+.ed-v a{text-decoration:none;color:var(--muted);}
+.ed-v a:hover{color:var(--accent);}
+.ed-old a{color:var(--faint);}                          /* superseded wording, muted */
+.ed-cur a{color:var(--ink);font-weight:600;}            /* the current headline stands out */
+.ed-when{font-size:10.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums;}
+@media (max-width:560px){.ed-v{grid-template-columns:14px 1fr;}.ed-when{grid-column:2;}}
 
 /* act 1.5 — temporal timeline (daily stacked bars by country + range brush) */
 .tl{padding:16px 22px 20px;}

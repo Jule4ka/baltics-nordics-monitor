@@ -50,19 +50,20 @@ which then serves it. See [Publishing explained](#publishing-explained-the-compl
 
 | Broadcaster | Country | Scraper notebook | Master data file |
 |---|---|---|---|
-| ERR | 🇪🇪 Estonia | `err_ee.ipynb` | `data/err_ee-always-updated.csv` |
-| LRT | 🇱🇹 Lithuania | `lrt_lt.ipynb` | `data/lrt_lt-always-updated.csv` |
-| LSM | 🇱🇻 Latvia | `lsm_lv.ipynb` | `data/lsm_lv-always-updated.csv` |
+| ERR | 🇪🇪 Estonia | `scrapers/err_ee.ipynb` | `data/err_ee-always-updated.csv` |
+| LRT | 🇱🇹 Lithuania | `scrapers/lrt_lt.ipynb` | `data/lrt_lt-always-updated.csv` |
+| LSM | 🇱🇻 Latvia | `scrapers/lsm_lv.ipynb` | `data/lsm_lv-always-updated.csv` |
 
 Only the **English editions** are scraped.
 
 ## Data flow at a glance
 
 ```
+  scrapers/
   ┌─ err_ee.ipynb ─┐
   ├─ lrt_lt.ipynb ─┤   scrape homepages      ┌───────────────────┐
   └─ lsm_lv.ipynb ─┘  ───────────────────▶   │  data/*.csv        │  (archive of headlines)
-        (LSM also uses scrape.py +           └─────────┬─────────┘
+        (LSM also uses scrapers/scrape.py +  └─────────┬─────────┘
          Playwright to beat Cloudflare)                │
                                                         ▼
                                             ┌───────────────────────┐
@@ -107,9 +108,11 @@ baltics-nordics-monitor/
 │   ├── report.html                    #   page body markup
 │   └── report.js                      #   the interactive Canvas map + charts
 │
-├── err_ee.ipynb  lrt_lt.ipynb  lsm_lv.ipynb   # the three scrapers
-├── scrape.py                          # Playwright helper: fetches the LSM homepage past Cloudflare
-├── lsm_page.html                      # scrape.py's rendered LSM homepage (intermediate file)
+├── scrapers/                          # THE SCRAPERS — the three notebooks + LSM helper
+│   ├── err_ee.ipynb  lrt_lt.ipynb  lsm_lv.ipynb   # one notebook per broadcaster
+│   ├── scrape.py                      #   Playwright helper: fetches the LSM homepage past Cloudflare
+│   └── lsm_page.html                  #   scrape.py's rendered LSM homepage (intermediate)
+│                                      #   (each notebook chdir's to the repo root, so data/ paths are unchanged)
 └── .github/workflows/                 # the once-a-day automation
 ```
 
@@ -130,8 +133,8 @@ Each notebook fetches its broadcaster's homepage, extracts each **headline + URL
 Two of the three are easy; one is not:
 - **ERR** and **LRT** are fetched with a plain `requests.get()`.
 - **LSM** sits behind **Cloudflare**, which blocks plain requests. So `lsm_lv.ipynb`
-  first runs **`scrape.py`**, which drives a headless **Playwright + stealth** browser
-  to clear the Cloudflare challenge and save the rendered HTML to `lsm_page.html` for
+  first runs **`scrapers/scrape.py`**, which drives a headless **Playwright + stealth** browser
+  to clear the Cloudflare challenge and save the rendered HTML to `scrapers/lsm_page.html` for
   the notebook to parse. (This is why LSM needs a real browser — see *Caveats*.)
 
 ### 2. Analyse & build the report (`topic_analysis.py`)
@@ -235,9 +238,9 @@ venv/Scripts/python -m pip install jupyter lxml pandas requests beautifulsoup4 h
 venv/Scripts/python -m playwright install chromium
 
 # scrape (run each notebook), then build the report
-jupyter nbconvert --to notebook --execute err_ee.ipynb --stdout
-jupyter nbconvert --to notebook --execute lrt_lt.ipynb --stdout
-jupyter nbconvert --to notebook --execute lsm_lv.ipynb --stdout
+jupyter nbconvert --to notebook --execute scrapers/err_ee.ipynb --stdout
+jupyter nbconvert --to notebook --execute scrapers/lrt_lt.ipynb --stdout
+jupyter nbconvert --to notebook --execute scrapers/lsm_lv.ipynb --stdout
 venv/Scripts/python topic_analysis.py        # writes analysis/baltics-monitor.html
 ```
 
@@ -321,9 +324,9 @@ The publish step needs to push into the **other** repo, so it uses a secret:
   on-page note saying this.)
 - **Dates are scrape dates, not publish dates** — "collected between X and Y".
 - **LSM depends on a real browser.** If Playwright/Chromium isn't installed or Cloudflare
-  blocks the runner, `scrape.py` fails — and `lsm_lv.ipynb` now runs it with
+  blocks the runner, `scrapers/scrape.py` fails — and `lsm_lv.ipynb` now runs it with
   `subprocess(check=True)` so it **fails loudly** instead of silently re-parsing a stale
-  `lsm_page.html`. Cloudflare is harsher on datacenter IPs, so CI may occasionally be
+  `scrapers/lsm_page.html`. Cloudflare is harsher on datacenter IPs, so CI may occasionally be
   blocked; the most reliable LSM refresh is a local run.
 - **The Nikola build runs in CI.** If a future `Nikola[extras]` install/build breaks on
   the runner's Python, pin `python-version` in the workflow to whatever the site builds
