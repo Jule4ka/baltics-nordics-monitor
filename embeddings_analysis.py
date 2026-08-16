@@ -314,7 +314,9 @@ def build_view(df, scope, model):
     xy = _umap(emb, n_components=2, min_dist=0.1)      # 2-D layout for the map
     _nn, iso = _neighbors(emb, 5)
     raw = _cluster(emb)                                # HDBSCAN labels (-1 = noise)
-    keywords = _ctfidf_labels(texts, raw, topn=4)      # {raw_id: [term, ...]}
+    # at most 2 terms per cluster, so the legend, tone rows AND the click-to-list
+    # all show the SAME label (a redundant cluster collapses to a single word)
+    keywords = _ctfidf_labels(texts, raw, topn=2)      # {raw_id: [term, ...]}
     tone = _tone(emb, model)                           # per-article escalation tone
 
     # Renumber clusters 0..K-1 by size (largest first) for stable colours; noise last.
@@ -433,14 +435,14 @@ EMB_CSS = """
 """
 
 _EMB_SECTION = """
-    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.2"/><circle cx="14" cy="6" r="2.2"/><circle cx="10" cy="14" r="2.2"/><path d="M7.8 8.2 12 12M12.2 7.2 11 12"/></svg> Discovered topics — clusters found by meaning (embeddings &rarr; HDBSCAN)</p>
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.2"/><circle cx="14" cy="6" r="2.2"/><circle cx="10" cy="14" r="2.2"/><path d="M7.8 8.2 12 12M12.2 7.2 11 12"/></svg> Discovered topics — clusters found by meaning</p>
     <section class="panel">
       <div class="panel-h">
         <h2>Semantic topics &amp; anomalies</h2>
-        <span class="hint mono">topics DISCOVERED from the text, independent of the keyword themes above</span>
+        <span class="hint mono">topics discovered from the text</span>
       </div>
       <div style="padding:14px 20px 0">
-        <p class="emb-note">Built from scratch from the article <b>embeddings</b> (BGE-large), <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Embeds each story's <b>headline + body</b>. Genuinely off-topic stories fall out as <i>Unclustered</i>.</p>
+        <p class="emb-note">Built from scratch from the article <b>embeddings</b>, <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Embeds each story's <b>headline + body</b>. Off-topic stories fall out as <i>Unclustered</i>.</p>
         <div class="emb-tabs" id="embTabs"></div>
       </div>
       <div class="emb-wrap">
