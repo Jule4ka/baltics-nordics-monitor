@@ -35,7 +35,7 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   background:var(--gold);
   -webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;
           mask:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='30'%20height='30'%3E%3Cpath%20d='M15%200L30%2015L15%2030L0%2015Z'%20fill='none'%20stroke='%23000'%20stroke-width='1.1'/%3E%3Ccircle%20cx='15'%20cy='15'%20r='1.2'%20fill='%23000'/%3E%3C/svg%3E") repeat;}
-.shell{max-width:min(1600px,95vw);margin:0 auto;padding:0 22px;position:relative;z-index:1;}
+.shell{max-width:min(1240px,94vw);margin:0 auto;padding:0 22px;position:relative;z-index:1;}
 /* explanatory notes span the full width (like the "Read with care" note) */
 .lede,.note,.emb-note,.tone-sub,footer{max-width:none;}
 header{margin:24px 0 0;padding:40px 40px 30px;border:3px solid var(--gold);border-radius:9px;
