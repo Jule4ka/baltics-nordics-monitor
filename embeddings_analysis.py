@@ -209,12 +209,16 @@ def _cluster(emb):
         return np.zeros(n, dtype=int)                  # too few docs to cluster
     red = _umap(emb, n_components=min(5, n - 2), min_dist=0.0)
     # Defence/geopolitics feeds are topically narrow, so most stories pile into one
-    # dense mass. A larger min_cluster_size lets excess-of-mass keep that whole blob
-    # as a single cluster (n//25 gave just 2 topics on ~260 docs); a smaller floor
-    # tips it past that cliff and the mass splits into ~10-15 readable sub-topics.
+    # dense mass. HDBSCAN's default "eom" (excess-of-mass) selection prefers that big
+    # parent cluster, and around min_cluster_size ~= n/30 it collapses the whole feed
+    # into just 2 mega-blobs — a sharp cliff, not a gradual drift (eom gave 15 topics
+    # at mcs=8 but 2 at mcs=9/10 on a 272-doc corpus). Tuning the divisor only moves
+    # the cliff; as the corpus grows, n//30 eventually lands back on it and we get 2
+    # topics "again". "leaf" selection instead keeps the leaf sub-clusters, decomposing
+    # that mass into ~10-15 readable sub-topics and degrading smoothly with mcs.
     mcs = max(6, n // 30)                              # ~10-15 topics on a ~150-260 doc corpus
-    labels = HDBSCAN(min_cluster_size=mcs, min_samples=1,
-                     metric="euclidean").fit_predict(red)
+    labels = HDBSCAN(min_cluster_size=mcs, min_samples=1, metric="euclidean",
+                     cluster_selection_method="leaf").fit_predict(red)
     return labels
 
 
