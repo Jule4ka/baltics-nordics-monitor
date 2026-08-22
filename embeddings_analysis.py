@@ -222,11 +222,85 @@ def _cluster(emb):
     return labels
 
 
+# A noise point joins a cluster if its cosine to that centroid clears the cluster's
+# admission bar: the NOISE_ADMIT_PCTL-th percentile of members' own cosine to the
+# centroid. LOWER percentile = lower bar = MORE points absorbed out of noise; higher
+# keeps more as Unclustered. 10 ≈ "closer than the cluster's most peripheral tenth",
+# which folds in the obvious border cases while leaving genuine outliers alone.
+# Reassignment runs in the ORIGINAL embedding space (cosine), not the UMAP layout,
+# à la BERTopic's reduce_outliers.
+NOISE_ADMIT_PCTL = 10
+
+
+def _reduce_noise(emb, labels):
+    """Fold HDBSCAN's -1 noise into the nearest real cluster when it's a plausible
+    member, leaving only genuinely isolated stories as 'Unclustered'.
+
+    HDBSCAN is deliberately conservative — a topically narrow feed leaves lots of
+    low-density border points flagged noise even though they sit right beside a
+    cluster. For each real cluster we take its centroid and an admission bar (the
+    NOISE_ADMIT_PCTL-th percentile of members' cosine to that centroid); a noise
+    point joins the best-matching cluster only if it clears that cluster's bar.
+    """
+    labels = np.asarray(labels).copy()
+    real = sorted(c for c in set(labels.tolist()) if c != -1)
+    noise = np.where(labels == -1)[0]
+    if not real or not len(noise):
+        return labels
+    cents, bars = {}, {}
+    for c in real:
+        m = emb[labels == c]
+        cen = m.mean(axis=0)
+        cen = cen / (np.linalg.norm(cen) or 1.0)
+        cents[c] = cen
+        bars[c] = float(np.percentile(m @ cen, NOISE_ADMIT_PCTL))
+    C = np.stack([cents[c] for c in real])             # (n_clusters, dim)
+    sims = emb[noise] @ C.T                             # (n_noise, n_clusters), cosine
+    best = sims.argmax(axis=1)
+    admitted = 0
+    for row, i in enumerate(noise):
+        c = real[best[row]]
+        if sims[row, best[row]] >= bars[c]:
+            labels[i] = c
+            admitted += 1
+    if admitted:
+        print(f"[cluster] reduced noise: {admitted}/{len(noise)} outliers reassigned, "
+              f"{len(noise) - admitted} left Unclustered")
+    return labels
+
+
 # ── semantic labelling (class-based TF-IDF, à la BERTopic) ───────────────────
 _LABEL_STOP = set(config.EXTRA_STOP) | set(config.FREQ_STOP) | {
     "say", "says", "said", "told", "reports", "report", "reported", "week",
     "government", "minister", "ministry", "official", "officials", "plan", "plans",
+    "photo",                                           # caption/credit boilerplate
+    # Feed-universal fillers: this is a DEFENCE feed, so "defence/military/security"
+    # sit in almost every cluster and carry no distinguishing signal — yet c-TF-IDF
+    # still hands them out as the theme word, so two clusters both read "defence · x".
+    # Drop them from LABELS (not from the embeddings) so the next-most-distinctive
+    # term surfaces instead.
+    "defense", "defenses", "defence", "defences", "military", "militaries",
+    "security", "forces", "army", "war", "warfare",
 }
+
+# Labels must read as ENGLISH. The sources are English editions of Baltic
+# broadcasters, but photo credits, institution names and bylines drag local-language
+# tokens into the article bodies, and c-TF-IDF loves them precisely because they're
+# rare-and-distinctive — so a cluster ends up labelled "border · valsts". There's no
+# structural signal separating a wanted proper noun (nato, kyiv, iran) from an
+# unwanted one (a surname, a Latvian institution acronym), so we curate the leaks.
+# Extend this as new foreign tokens surface; it only affects LABELS, not clustering.
+_NON_ENGLISH = {
+    # Latvian / Estonian / Lithuanian common words + caption boilerplate
+    "valsts", "prezidents", "prezidenta", "prezidentu", "prezidents", "kanceleja",
+    "latvijas", "latvija", "austrumu", "robezsardze",
+    # foreign institution acronyms (used verbatim in the English text)
+    "csdd", "vsat", "ppa", "otp", "riigikogu",
+    # surnames / local place names that RECUR across a cluster's stories (the docfreq
+    # filter already drops one-off names; these appear often enough to need listing)
+    "liubajevas", "kiviselg", "viimsalu", "luik", "karu", "edgars", "katelynas",
+}
+_LABEL_STOP |= _NON_ENGLISH
 
 
 def _dedupe_terms(terms, k):
@@ -275,10 +349,22 @@ def _ctfidf_labels(texts, labels, topn=3):
     idf = np.log(1.0 + A / np.clip(X.sum(axis=0), 1, None))     # rarer-across-classes -> bigger
     ctfidf = tf * idf
 
+    # In-cluster document frequency: how many of a cluster's OWN articles use each term.
+    # A label should describe the whole cluster, so a term must recur across several of
+    # its stories — not sit in just one. This is what keeps one-off surnames and stray
+    # foreign tokens (a photo credit, a byline) out of labels WITHOUT a curated list:
+    # they appear in a single article, so they never clear the bar. Real themes recur.
+    present = (cv.transform(texts) > 0)                          # (n_articles, n_terms) binary
+    members = {cid: [i for i, l in enumerate(labels) if l == cid] for cid in ids}
+
     # Per-cluster ranked candidates (morphological variants collapsed WITHIN a cluster).
     cand = {}
     for row, cid in enumerate(ids):
-        ranked = [vocab[j] for j in np.argsort(-ctfidf[row]) if ctfidf[row, j] > 0][:20]
+        idx = members[cid]
+        dfreq = np.asarray(present[idx].sum(axis=0)).ravel() if idx else np.zeros(len(vocab))
+        minhits = max(2, int(round(0.15 * len(idx))))           # ≥2 stories and ≥15% of the cluster
+        ranked = [vocab[j] for j in np.argsort(-ctfidf[row])
+                  if ctfidf[row, j] > 0 and dfreq[j] >= minhits][:20]
         cand[cid] = _dedupe_terms(ranked, 8)
 
     # Keep the MEANING but still tell look-alike clusters apart: build each label as
@@ -354,6 +440,7 @@ def build_view(df, scope, model):
     xy = _umap(emb, n_components=2, min_dist=0.1)      # 2-D layout for the map
     _nn, iso = _neighbors(emb, 5)
     raw = _cluster(emb)                                # HDBSCAN labels (-1 = noise)
+    raw = _reduce_noise(emb, raw)                      # fold border points out of noise
     # at most 2 terms per cluster, so the legend, tone rows AND the click-to-list
     # all show the SAME label (a redundant cluster collapses to a single word)
     keywords = _ctfidf_labels(texts, raw, topn=2)      # {raw_id: [term, ...]}
