@@ -1,29 +1,32 @@
 
+/* Baltic folk palette: natural-linen day / dark-wool winter night, with a Latvian
+   carmine-red accent, Baltic amber gold, folk indigo and forest green — the colours
+   of a woven josta belt, not the old brown-paper look. */
 :root{
-  --bg:#e7d5b3; --panel:#f6ecd2; --ink:#2b140f; --muted:#6d4634; --faint:#9c7a5a;
-  --border:#c1972f; --border2:#e2cd9c; --accent:#a52f1d; --gold:#bd8322; --green:#3c7a4e;
-  --indigo:#2f4b7c; --indigo2:#213b6b;
-  --grid:#d7bf8f; --shadow:0 2px 4px rgba(70,35,15,.12),0 16px 36px rgba(70,35,15,.18);
+  --bg:#ece2cb; --panel:#f9f2e2; --ink:#241a13; --muted:#6b4a39; --faint:#9d8365;
+  --border:#bf982f; --border2:#e4d5ac; --accent:#a4243b; --gold:#bd8322; --green:#2f6b46;
+  --indigo:#2c4a7a; --indigo2:#213b6b;
+  --grid:#d9c79b; --shadow:0 2px 4px rgba(70,35,15,.12),0 16px 36px rgba(70,35,15,.18);
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --bg:#180c0a; --panel:#26130d; --ink:#f4e7cd; --muted:#c6a986; --faint:#8c7455;
-    --border:#84591f; --border2:#3a2315; --accent:#e8614a; --gold:#e6ad4c; --green:#5fb17b;
-  --indigo:#8ea9dd; --indigo2:#a9c0ec;
-    --grid:#35221a; --shadow:0 2px 6px rgba(0,0,0,.5),0 18px 44px rgba(0,0,0,.62);
+    --bg:#15161c; --panel:#1e2028; --ink:#f2e7d1; --muted:#c3a98a; --faint:#8a7a68;
+    --border:#9a7328; --border2:#2f2d38; --accent:#e2604f; --gold:#e8b355; --green:#63b783;
+    --indigo:#9fb4e6; --indigo2:#a9c0ec;
+    --grid:#2a2833; --shadow:0 2px 6px rgba(0,0,0,.5),0 18px 44px rgba(0,0,0,.62);
   }
 }
 :root[data-theme=light]{
-  --bg:#e7d5b3; --panel:#f6ecd2; --ink:#2b140f; --muted:#6d4634; --faint:#9c7a5a;
-  --border:#c1972f; --border2:#e2cd9c; --accent:#a52f1d; --gold:#bd8322; --green:#3c7a4e;
-  --indigo:#2f4b7c; --indigo2:#213b6b;
-  --grid:#d7bf8f; --shadow:0 2px 4px rgba(70,35,15,.12),0 16px 36px rgba(70,35,15,.18);
+  --bg:#ece2cb; --panel:#f9f2e2; --ink:#241a13; --muted:#6b4a39; --faint:#9d8365;
+  --border:#bf982f; --border2:#e4d5ac; --accent:#a4243b; --gold:#bd8322; --green:#2f6b46;
+  --indigo:#2c4a7a; --indigo2:#213b6b;
+  --grid:#d9c79b; --shadow:0 2px 4px rgba(70,35,15,.12),0 16px 36px rgba(70,35,15,.18);
 }
 :root[data-theme=dark]{
-  --bg:#180c0a; --panel:#26130d; --ink:#f4e7cd; --muted:#c6a986; --faint:#8c7455;
-  --border:#84591f; --border2:#3a2315; --accent:#e8614a; --gold:#e6ad4c; --green:#5fb17b;
-  --indigo:#8ea9dd; --indigo2:#a9c0ec;
-  --grid:#35221a; --shadow:0 2px 6px rgba(0,0,0,.5),0 18px 44px rgba(0,0,0,.62);
+  --bg:#15161c; --panel:#1e2028; --ink:#f2e7d1; --muted:#c3a98a; --faint:#8a7a68;
+  --border:#9a7328; --border2:#2f2d38; --accent:#e2604f; --gold:#e8b355; --green:#63b783;
+  --indigo:#9fb4e6; --indigo2:#a9c0ec;
+  --grid:#2a2833; --shadow:0 2px 6px rgba(0,0,0,.5),0 18px 44px rgba(0,0,0,.62);
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);

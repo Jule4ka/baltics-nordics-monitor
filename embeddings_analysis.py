@@ -541,29 +541,34 @@ def build_view(df, scope, model):
     K = len(real)
     light, dark = _palette(K)
 
-    # Offline label = the cluster's top 2 distinctive terms (phrases preferred), joined
-    # with " · " — e.g. "ukraine war · russian threat". Kept UNIQUE by extending with
-    # the next term on an exact collision. These are UPGRADED to a single fluent phrase
-    # by the LLM below whenever a key is available.
+    # Cross-cluster term frequency: how many real clusters list each term. A label's
+    # SECOND word should be a term DISTINCTIVE to this cluster (share == 1), so two
+    # neighbouring topics never read as mere reorderings of the same shared words
+    # ("ukraine · russia" vs "russia · ukraine").
+    from collections import Counter
+    share = Counter(t for c in real for t in set(keywords.get(c, [])))
+
+    def _stems(t):
+        return {w[:4] for w in t.split()}
+
+    # Offline label = an identity term + a term distinctive to THIS cluster, joined with
+    # " · " (phrases preferred for both) — e.g. "russia · long range". Kept unique by
+    # extending on an exact collision. UPGRADED to a single fluent phrase by the LLM when
+    # a key is available.
     used_labels = set()
     def _phrase_label(kw, i):
         if not kw:
             return f"topic {i + 1}"
-        # Lead with a multi-word phrase if one sits among the top candidates; then add
-        # the next distinct term (skip morphological overlaps with the lead).
+        # identity term: a phrase if one is among the top candidates, else the top term
         lead = next((t for t in kw[:2] if " " in t), kw[0])
-        seen = {w[:4] for w in lead.split()}
-        parts = [lead]
-        for t in kw:
-            if t == lead:
-                continue
-            st = {w[:4] for w in t.split()}
-            if st & seen:
-                continue
-            parts.append(t)
-            seen |= st
-            if len(parts) >= 2:
-                break
+        lstem = _stems(lead)
+        # distinctive second: the highest-RANKED term (c-TF-IDF order, so representative
+        # not one-off) that is UNIQUE to this cluster (share == 1) and stem-distinct from
+        # the lead; fall back to the next distinct term of any kind.
+        rest = [t for t in kw if t != lead and not (_stems(t) & lstem)]
+        second = (next((t for t in rest if share[t] == 1), None)  # top-ranked unique term
+                  or (rest[0] if rest else None))                 # any distinct term
+        parts = [lead] + ([second] if second else [])
         lab = " · ".join(parts)
         extra = [t for t in kw if t not in parts]
         while lab in used_labels and extra:             # disambiguate exact duplicates

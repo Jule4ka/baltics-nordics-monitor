@@ -1,6 +1,5 @@
 
 const D = __DATA__;
-const THEME_LABEL = {}; (D.themes||[]).forEach(t=>THEME_LABEL[t.id]=t.label);   // id -> name (for tooltips + multi-label tags)
 
 // ---- act 1: Baltic defence-share choropleth ----
 (function(){
@@ -151,16 +150,6 @@ const THEME_LABEL = {}; (D.themes||[]).forEach(t=>THEME_LABEL[t.id]=t.label);   
   legend(); sync();
 })();
 
-const cvs = document.getElementById('map'), ctx = cvs.getContext('2d');
-const tip = document.getElementById('tip'), wrap = cvs.parentElement;
-// start with every theme visible; click a legend entry to toggle it off/on
-const hidden = new Set();
-let pts = [], labelPos = [], hover = -1, anim = 1;
-const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const isDark = () => { const t = document.documentElement.getAttribute('data-theme');
-  return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches); };
-let C = isDark() ? D.colorsDark : D.colors;      // theme-aware categorical palette
-
 // header stats — the numeric three, then an "Updated" tile: the DATE in the same
 // number font, plus an info icon that reveals the exact time (seconds + timezone)
 // on hover or click.
@@ -180,43 +169,6 @@ document.querySelectorAll('#stats .info-btn').forEach(b=>{
 });
 document.addEventListener('click',()=>document.querySelectorAll('#stats .stat-info.open')
   .forEach(el=>el.classList.remove('open')));
-
-// legend — toggle themes on/off; rebuilt on theme change so swatches track colours
-const leg = document.getElementById('legend');
-function renderLegend(){
-  leg.innerHTML = D.themes.map(t =>
-    `<div class="leg${hidden.has(t.id)?' off':''}" data-c="${t.id}" tabindex="0">`
-    + `<span class="sw" style="background:${C[t.id]}"></span>${t.label}`
-    + `<span class="lc">${t.count}</span></div>`
-  ).join('');
-  leg.querySelectorAll('.leg').forEach(el=>{
-    const toggle=()=>{const id=+el.dataset.c; hidden.has(id)?hidden.delete(id):hidden.add(id);
-      el.classList.toggle('off'); draw();};
-    el.onclick=toggle;
-    el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
-  });
-}
-
-// per-theme cards — the article list is hidden until you select (click) a theme
-function renderCards(){
-  document.getElementById('cards').innerHTML = D.themes.map(t=>{
-    const arts = D.points.filter(p=>(p.cs||[p.c]).includes(t.id)).sort((a,b)=>b.d.localeCompare(a.d));
-    const col = C[t.id];
-    const li = arts.map(p=>{
-      const also = (p.cs||[]).filter(id=>id!==t.id).map(id=>THEME_LABEL[id]).filter(Boolean);
-      const tag = also.length ? ` · also ${also.join(', ')}` : '';
-      return `<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}${tag}</span></a></li>`;
-    }).join('');
-    return `<div class="card" style="--dot:${col}"><h3 class="card-h">`
-      + `<span class="sw" style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block"></span>`
-      + `${t.label}<span class="lc">${t.count}</span><span class="caret">▶</span></h3>`
-      + `<p class="card-hint">click to read ${t.count} article${t.count>1?'s':''}</p>`
-      + `<ul class="card-arts">${li}</ul></div>`;
-  }).join('');
-  document.querySelectorAll('#cards .card').forEach(card=>{
-    card.querySelector('.card-h').onclick = () => card.classList.toggle('open');
-  });
-}
 
 // act 3 — keyword frequency bars; click a term to reveal its articles
 function renderFreq(){
@@ -238,135 +190,13 @@ function renderFreq(){
     row.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
   });
 }
-// make an absolutely-positioned overlay draggable so it never permanently hides dots.
-// a real drag (moved past a few px) suppresses the click that would otherwise toggle.
-function makeDraggable(el){
-  let sx, sy, ox, oy, pid, down = false, dragging = false, moved = false;
-  el.style.cursor = 'grab'; el.title = 'drag to move';
-  el.addEventListener('pointerdown', e => {
-    down = true; dragging = false; moved = false; pid = e.pointerId;
-    sx = e.clientX; sy = e.clientY;
-    const r = el.getBoundingClientRect(), pr = el.offsetParent.getBoundingClientRect();
-    ox = r.left - pr.left; oy = r.top - pr.top;
-  });
-  el.addEventListener('pointermove', e => {
-    if(!down) return;
-    const dx = e.clientX - sx, dy = e.clientY - sy;
-    if(!dragging && Math.abs(dx) + Math.abs(dy) > 4){    // only NOW does it become a drag
-      dragging = true; moved = true;
-      el.style.right = 'auto'; el.style.left = ox + 'px'; el.style.top = oy + 'px';
-      el.style.cursor = 'grabbing'; el.setPointerCapture(pid);
-    }
-    if(dragging){ el.style.left = (ox + dx) + 'px'; el.style.top = (oy + dy) + 'px'; }
-  });
-  const end = () => { down = false; if(dragging){ el.style.cursor = 'grab';
-    try{ el.releasePointerCapture(pid); }catch(_){} } dragging = false; };
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
-  el.addEventListener('click', e => { if(moved){ e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
-}
 
-// edits — ERR stories whose headline was revised after publishing (newest change first).
-// Each item shows the version history: the first-seen headline, then each later wording,
-// with the date it was first captured. Hidden entirely when nothing has been edited.
-function renderEdits(){
-  const E = D.edits || [];
-  const panel = document.getElementById('editsPanel'), head = document.getElementById('editsH');
-  const box = document.getElementById('edits');
-  if(!box) return;
-  if(!E.length){ if(panel) panel.style.display='none'; if(head) head.style.display='none'; return; }
-  box.innerHTML = E.map(e=>{
-    const vs = e.versions.map((v,i)=>{
-      const last = i===e.versions.length-1;
-      const mark = i ? '↳' : '•';
-      return `<li class="ed-v ${last?'ed-cur':'ed-old'}"><span class="ed-mark">${mark}</span>`
-        + `<a href="${v.u}" target="_blank" rel="noopener">${v.h}</a>`
-        + `<span class="ed-when mono">${v.t}</span></li>`;   // 'DD Mon HH:MM CET/CEST'
-    }).join('');
-    return `<div class="ed-item"><div class="ed-meta mono"><span class="ed-src">${e.source}</span>`
-      + `<span class="ed-n">${e.n} versions</span></div><ul class="ed-vers">${vs}</ul></div>`;
-  }).join('');
-}
-
-renderLegend(); renderCards(); renderFreq(); renderEdits();
-makeDraggable(leg);
-
-// bounds
-const xs=D.points.map(p=>p.x), ys=D.points.map(p=>p.y);
-let minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
-const px=(maxX-minX)*0.08||1, py=(maxY-minY)*0.08||1;
-minX-=px;maxX+=px;minY-=py;maxY+=py;
-
-function layout(){
-  const dpr=devicePixelRatio||1, w=wrap.clientWidth, h=cvs.clientHeight;
-  cvs.width=w*dpr; cvs.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
-  const pad=34;
-  pts=D.points.map(p=>({
-    ...p,
-    sx:pad+(p.x-minX)/(maxX-minX)*(w-2*pad),
-    sy:pad+(maxY-p.y)/(maxY-minY)*(h-2*pad)
-  }));
-  labelPos=D.themes.map(t=>({
-    id:t.id, label:t.label,
-    sx:pad+(t.cx-minX)/(maxX-minX)*(w-2*pad),
-    sy:pad+(maxY-t.cy)/(maxY-minY)*(h-2*pad)
-  }));
-}
-function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
-function draw(){
-  const w=wrap.clientWidth,h=cvs.clientHeight;
-  ctx.clearRect(0,0,w,h);
-  // faint grid
-  ctx.strokeStyle=css('--grid');ctx.lineWidth=1;
-  for(let i=1;i<6;i++){const gx=i/6*w;ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();
-    const gy=i/6*h;ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
-  const ground=css('--panel');
-  pts.forEach((p,i)=>{
-    if(hidden.has(p.c))return;
-    const r=Math.max(0,(i===hover?8:5.5)*anim);
-    ctx.beginPath();ctx.arc(p.sx,p.sy,r,0,7);
-    ctx.fillStyle=C[p.c];ctx.globalAlpha=i===hover?1:0.85;ctx.fill();
-    ctx.globalAlpha=1;ctx.lineWidth=i===hover?2:1.2;ctx.strokeStyle=ground;ctx.stroke();
-    if(i===hover){ctx.beginPath();ctx.arc(p.sx,p.sy,r+4,0,7);
-      ctx.strokeStyle=C[p.c];ctx.globalAlpha=.4;ctx.lineWidth=1.5;ctx.stroke();ctx.globalAlpha=1;}
-  });
-  // theme identity now lives entirely in the legend — no labels drawn on the map
-}
-function nearest(mx,my){
-  let best=-1,bd=169;
-  pts.forEach((p,i)=>{if(hidden.has(p.c))return;
-    const d=(p.sx-mx)**2+(p.sy-my)**2;if(d<bd){bd=d;best=i;}});
-  return best;
-}
-cvs.addEventListener('mousemove',e=>{
-  const rc=cvs.getBoundingClientRect(),mx=e.clientX-rc.left,my=e.clientY-rc.top;
-  const h=nearest(mx,my);
-  if(h!==hover){hover=h;draw();}
-  if(h>=0){const p=pts[h];cvs.style.cursor='pointer';
-    tip.innerHTML=`<b>${p.h}</b><span class="meta">${p.s} · ${p.d} · ${(p.cs||[p.c]).map(id=>THEME_LABEL[id]).filter(Boolean).join(', ')}</span>`;
-    tip.style.opacity=1;
-    let tx=mx+16,ty=my+16;
-    if(tx+tip.offsetWidth>wrap.clientWidth)tx=mx-tip.offsetWidth-16;
-    if(ty+tip.offsetHeight>cvs.clientHeight)ty=my-tip.offsetHeight-16;
-    tip.style.left=tx+'px';tip.style.top=ty+'px';
-  }else{cvs.style.cursor='default';tip.style.opacity=0;}
-});
-cvs.addEventListener('mouseleave',()=>{hover=-1;tip.style.opacity=0;draw();});
-cvs.addEventListener('click',()=>{if(hover>=0)window.open(pts[hover].u,'_blank','noopener');});
-new ResizeObserver(()=>{layout();draw();}).observe(wrap);
-layout();
-if(reduce){anim=1;draw();}
-else{anim=0;const t0=performance.now();
-  (function run(t){anim=Math.max(0,Math.min(1,(t-t0)/500));draw();if(anim<1)requestAnimationFrame(run);})(t0);}
-// on theme toggle: swap palette, rebuild legend + cards swatches, redraw canvas
-function onTheme(){ C = isDark() ? D.colorsDark : D.colors; renderLegend(); renderCards(); draw(); }
-new MutationObserver(onTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-matchMedia('(prefers-color-scheme:dark)').addEventListener('change',onTheme);
+renderFreq();
 
 // ── collapsible sections ─────────────────────────────────────────────────────
 // Each `.section-h` becomes a toggle; everything between it and the next
 // `.section-h` is wrapped into a body that starts collapsed, so the page opens as
-// a list of sections you expand on demand (numbers, timeline, themes, words, …).
+// a list of sections you expand on demand (numbers, timeline, words, …).
 // Canvases (the maps) redraw on expand via their ResizeObserver; we also fire a
 // resize event as a belt-and-suspenders for anything measuring width.
 (function(){
