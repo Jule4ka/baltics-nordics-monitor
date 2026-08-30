@@ -390,6 +390,100 @@ def _ctfidf_labels(texts, labels, topn=3):
     return {cid: cand[cid][:topn] for cid in ids}
 
 
+def _keybert_labels(texts, labels, emb, model, topn=4):
+    """Label clusters with a BLEND of KeyBERT + c-TF-IDF.
+
+    Candidate n-grams are proposed by recurrence, then scored by
+        cosine(phrase_embedding, cluster_centroid)   [semantic centrality, BGE]
+      × c-TF-IDF(term, cluster)                       [distinctiveness]
+    so the winner is a phrase that is BOTH on-topic AND specific to the cluster — cosine
+    alone rewards generic central words ("use", "incident"); c-TF-IDF alone rewards
+    distinctive-but-cryptic ones. Reuses the map's model + the article embeddings, and
+    falls back to c-TF-IDF ordering if candidate embedding fails, so the build never breaks."""
+    from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
+    ids = sorted(i for i in set(labels) if i != -1)
+    if not ids:
+        return {}
+    stop = list(ENGLISH_STOP_WORDS | _LABEL_STOP)
+    try:
+        cv = CountVectorizer(stop_words=stop, ngram_range=(1, 3),
+                             token_pattern=r"(?u)\b[a-zA-Z][a-zA-Z]+\b", min_df=1).fit(texts)
+    except ValueError:
+        return {cid: [] for cid in ids}
+    vocab = np.array(cv.get_feature_names_out())
+    lengths = np.array([t.count(" ") + 1 for t in vocab])
+    counts = cv.transform(texts)                                 # (n_articles, n_terms) counts
+    present = (counts > 0)
+    members = {cid: [i for i, l in enumerate(labels) if l == cid] for cid in ids}
+
+    # c-TF-IDF distinctiveness per (cluster, term): term freq in the class × how rare the
+    # term is ACROSS classes — this is what pushes shared words ("russia") and feed-universal
+    # fillers down, so they stop dominating every label.
+    X = np.vstack([np.asarray(counts[members[cid]].sum(axis=0)).ravel() if members[cid]
+                   else np.zeros(len(vocab)) for cid in ids]).astype(float)   # (n_classes, n_terms)
+    tf = X / np.clip(X.sum(axis=1, keepdims=True), 1, None)
+    A = X.sum() / max(1, len(ids))
+    idf = np.log(1.0 + A / np.clip(X.sum(axis=0), 1, None))
+    ctfidf = tf * idf                                            # (n_classes, n_terms)
+    phrase_boost = np.where(lengths >= 3, 2.4, np.where(lengths == 2, 2.0, 1.0))
+    solo_filler = np.array([0.12 if (lengths[j] == 1 and vocab[j] in _FILLER) else 1.0
+                            for j in range(len(vocab))])
+
+    # Per-cluster candidate pool: terms that RECUR in the cluster, kept by a phrase-aware
+    # pre-score (c-TF-IDF × phrase boost) so distinctive PHRASES survive into the pool
+    # instead of being crowded out by more-frequent single words. Capped at 30 to bound
+    # how many phrases we embed.
+    row_of = {cid: r for r, cid in enumerate(ids)}
+    cand_sets, all_cands = {}, set()
+    for cid in ids:
+        idx = members[cid]
+        if not idx:
+            cand_sets[cid] = []
+            continue
+        dfreq = np.asarray(present[idx].sum(axis=0)).ravel()
+        uni_min = max(2, int(round(0.15 * len(idx))))
+        thresh = np.where(lengths >= 2, 2, uni_min)
+        prescore = ctfidf[row_of[cid]] * phrase_boost * solo_filler
+        elig = [j for j in range(len(vocab))
+                if dfreq[j] >= thresh[j] and ctfidf[row_of[cid], j] > 0]
+        elig.sort(key=lambda j: -prescore[j])
+        cand_sets[cid] = [vocab[j] for j in elig[:30]]
+        all_cands.update(cand_sets[cid])
+    if not all_cands:
+        return {cid: [] for cid in ids}
+
+    # Embed every candidate phrase ONCE with the map's model, unit-normalise.
+    try:
+        cand_list = sorted(all_cands)
+        enc, _ = _encoder(model)
+        cvecs = _normalize(enc(cand_list))
+        cidx = {t: i for i, t in enumerate(cand_list)}
+    except Exception as e:
+        print(f"[label] KeyBERT embedding failed ({e.__class__.__name__}); using c-TF-IDF order")
+        return _ctfidf_labels(texts, labels, topn=topn)
+
+    jof = {t: j for j, t in enumerate(vocab)}
+    out = {}
+    for cid in ids:
+        cs = cand_sets[cid]
+        if not cs:
+            out[cid] = []
+            continue
+        cen = emb[members[cid]].mean(axis=0)
+        cen = cen / (np.linalg.norm(cen) or 1.0)
+        row = row_of[cid]
+
+        def blend(t):
+            j = jof[t]
+            cos = max(0.0, float(cvecs[cidx[t]] @ cen))         # semantic centrality (BGE)
+            return cos * ctfidf[row, j] * phrase_boost[j] * solo_filler[j]
+
+        ranked = sorted(cs, key=lambda t: -blend(t))
+        out[cid] = _dedupe_terms(ranked, 8)                     # collapse morphological overlaps
+    print(f"[label] KeyBERT×c-TF-IDF blended labels for {len(ids)} clusters via {model}")
+    return {cid: out[cid][:topn] for cid in ids}
+
+
 def _palette(k):
     """k visually distinct (light, dark) hex colours via golden-angle hues.
 
@@ -516,6 +610,93 @@ def _llm_labels(samples):
     return out
 
 
+# ── stable topic identities across builds (topic tracking) ──────────────────
+OTHER_ID = -1                       # the noise / "Other" bucket's fixed id
+TOPIC_MATCH_MIN = 0.85             # cosine floor to call a new cluster the SAME topic as a stored one
+
+
+def _topic_colors(idx):
+    """Stable (light, dark) hex for a topic by its PERMANENT id — golden-angle hue, so a
+    topic keeps its colour across builds and distinct topics stay well separated."""
+    def hsl(h, s, l):
+        c = (1 - abs(2 * l - 1)) * s
+        x = c * (1 - abs((h / 60) % 2 - 1))
+        m = l - c / 2
+        r, g, b = [(c, x, 0), (x, c, 0), (0, c, x), (0, x, c),
+                   (x, 0, c), (c, 0, x)][int(h // 60) % 6]
+        return "#%02x%02x%02x" % (round((r + m) * 255), round((g + m) * 255), round((b + m) * 255))
+    h = (idx * 137.508) % 360
+    return hsl(h, 0.62, 0.46), hsl(h, 0.68, 0.62)
+
+
+def _track_topics(clusters, centroids, scope, model, run_date):
+    """Give discovered clusters STABLE identities across builds.
+
+    A topic's centroid + name + colour is persisted to analysis/emb_cache. On each build a
+    newly-found cluster is matched to the most-similar stored topic (cosine ≥ TOPIC_MATCH_MIN,
+    one-to-one, best pairs first); a match inherits that topic's id, NAME and COLOUR so they
+    stay constant day to day, while an unmatched cluster becomes a brand-new topic. Long-dead
+    topics are retired. Returns {local_id: {id, label, color, colorDark}}."""
+    import json
+    path = os.path.join(CACHE_DIR, f"topics__{scope}__{_slug(model)}.json")
+    store = {"next": 0, "topics": []}
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                store = json.load(f)
+        except Exception:
+            store = {"next": 0, "topics": []}
+    stored = store.get("topics", [])
+    svecs = [np.asarray(t["centroid"], dtype=np.float32) for t in stored]
+    n_before = len(stored)                                 # topics that existed before this build
+
+    # rank all (new cluster, stored topic) pairs by cosine, then match greedily one-to-one
+    pairs = []
+    for cl in clusters:
+        v = centroids[cl["id"]]
+        for si, sv in enumerate(svecs):
+            denom = (float(np.linalg.norm(v)) * float(np.linalg.norm(sv))) or 1.0
+            pairs.append((float(v @ sv) / denom, cl["id"], si))
+    pairs.sort(reverse=True)
+    match, taken = {}, set()
+    for cos, li, si in pairs:
+        if cos < TOPIC_MATCH_MIN:
+            break
+        if li in match or si in taken:
+            continue
+        match[li] = si
+        taken.add(si)
+
+    result = {}
+    for cl in clusters:
+        li, v = cl["id"], centroids[cl["id"]]
+        vround = [round(float(x), 5) for x in v]
+        if li in match:                                    # existing topic — keep id/name/colour
+            t = stored[match[li]]
+            t["centroid"] = vround                         # refresh to current membership
+            t["last"], t["misses"] = run_date, 0
+        else:                                              # brand-new topic
+            tid = store["next"]; store["next"] = tid + 1
+            col, cold = _topic_colors(tid)
+            t = {"id": tid, "centroid": vround, "label": cl["label"],
+                 "color": col, "colorDark": cold,
+                 "first": run_date, "last": run_date, "misses": 0}
+            stored.append(t)
+        result[li] = {"id": t["id"], "label": t["label"],
+                      "color": t["color"], "colorDark": t["colorDark"]}
+
+    for si in range(n_before):                             # age only PRE-EXISTING topics not matched
+        if si not in taken:
+            stored[si]["misses"] = int(stored[si].get("misses", 0)) + 1
+    store["topics"] = [t for t in stored if int(t.get("misses", 0)) <= 120]   # retire long-dead
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(store, f, ensure_ascii=False)
+    except Exception:
+        pass
+    return result
+
+
 # ── build one scope's payload ───────────────────────────────────────────────
 def build_view(df, scope, model):
     urls = df["url"].tolist()
@@ -529,17 +710,18 @@ def build_view(df, scope, model):
     _nn, iso = _neighbors(emb, 5)
     raw = _cluster(emb)                                # HDBSCAN labels (-1 = noise)
     raw = _reduce_noise(emb, raw)                      # fold border points out of noise
-    # Up to 4 ranked distinctive terms per cluster (phrases preferred). The LABEL joins
-    # the top 2; the full list is kept as `keywords` for the expandable chips.
-    keywords = _ctfidf_labels(texts, raw, topn=4)      # {raw_id: [term, ...]}
+    # Up to 4 candidate terms per cluster, ranked KeyBERT-style — each phrase embedded with
+    # the map's BGE model and scored by cosine to the cluster centroid (semantic centrality,
+    # not word frequency). The LABEL joins the top 2; the list is kept as `keywords` chips.
+    keywords = _keybert_labels(texts, raw, emb, model, topn=4)   # {raw_id: [term, ...]}
     tone = _tone(emb, model)                           # per-article escalation tone
 
-    # Renumber clusters 0..K-1 by size (largest first) for stable colours; noise last.
+    # Local cluster numbering 0..K-1 by size (largest first). Colours + STABLE cross-build
+    # identities are assigned by _track_topics below; the noise bucket is handled separately.
     real = sorted((i for i in set(raw) if i != -1),
                   key=lambda c: -int((raw == c).sum()))
     remap = {c: i for i, c in enumerate(real)}
     K = len(real)
-    light, dark = _palette(K)
 
     # Cross-cluster term frequency: how many real clusters list each term. A label's
     # SECOND word should be a term DISTINCTIVE to this cluster (share == 1), so two
@@ -577,36 +759,52 @@ def build_view(df, scope, model):
         return lab
 
     heads = df["headline"].fillna("").tolist()
-    samples, clusters = {}, []
+    samples, clusters, centroids = {}, [], {}
     for i, c in enumerate(real):
         kw = keywords.get(c, [])
-        # representative headlines for the label prompt: closest to the cluster centroid
         members = [j for j in range(len(raw)) if raw[j] == c]
-        if members:
-            cen = emb[members].mean(axis=0)
-            cen = cen / (np.linalg.norm(cen) or 1.0)
+        cen = emb[members].mean(axis=0) if members else emb.mean(axis=0)
+        cen = cen / (np.linalg.norm(cen) or 1.0)
+        centroids[i] = cen                             # unit centroid, for topic tracking
+        if members:                                    # representative headlines for the LLM prompt
             order = sorted(members, key=lambda j: -float(emb[j] @ cen))
             samples[i] = {"keywords": kw, "headlines": [heads[j] for j in order[:6] if heads[j]]}
-        clusters.append({
-            "id": i, "label": _phrase_label(kw, i),
-            "keywords": kw, "size": int((raw == c).sum()),
-            "color": light[i], "colorDark": dark[i],
-        })
+        clusters.append({"id": i, "label": _phrase_label(kw, i),
+                         "keywords": kw, "size": int((raw == c).sum())})
     # Upgrade the keyword labels to LLM-written descriptive phrases when possible.
     phrases = _llm_labels(samples)
     for cl in clusters:
         if cl["id"] in phrases:
             cl["label"] = phrases[cl["id"]]
-    if (raw == -1).any():                              # noise bucket -> last id
-        clusters.append({
-            "id": K, "label": "Other", "keywords": [],
-            "size": int((raw == -1).sum()),
-            "color": NOISE_LIGHT, "colorDark": NOISE_DARK,
-        })
+
+    # Stable identities across builds: a topic keeps its id, name and colour day to day.
+    run_date = str(max((str(d) for d in df["scrape_date"]), default=""))[:10]
+    try:
+        track = _track_topics(clusters, centroids, scope, model, run_date)
+    except Exception as e:
+        print(f"[topics] tracking unavailable ({type(e).__name__}); per-build identities")
+        light, dark = _palette(K)
+        track = {cl["id"]: {"id": cl["id"], "label": cl["label"],
+                            "color": light[cl["id"]], "colorDark": dark[cl["id"]]}
+                 for cl in clusters}
+
+    local_to_stable, final = {}, []
+    for cl in clusters:
+        t = track[cl["id"]]
+        local_to_stable[cl["id"]] = t["id"]
+        final.append({"id": t["id"], "label": t["label"], "keywords": cl["keywords"],
+                      "size": cl["size"], "color": t["color"], "colorDark": t["colorDark"]})
+    final.sort(key=lambda c: -c["size"])               # legend order by size
+    clusters = final
+    if (raw == -1).any():                              # noise bucket -> fixed "Other" id
+        clusters.append({"id": OTHER_ID, "label": "Other", "keywords": [],
+                         "size": int((raw == -1).sum()),
+                         "color": NOISE_LIGHT, "colorDark": NOISE_DARK})
 
     pts = []
     for i, r in enumerate(df.itertuples()):
-        cid = remap.get(int(raw[i]), K)                # noise -> K
+        loc = remap.get(int(raw[i]))                   # local cluster id, or None for noise
+        cid = local_to_stable[loc] if loc is not None else OTHER_ID
         pts.append({
             "x": round(float(xy[i, 0]), 3), "y": round(float(xy[i, 1]), 3),
             "h": r.headline, "s": config.SRC_LABEL[r.source], "d": str(r.scrape_date),
@@ -727,7 +925,7 @@ _EMB_SECTION = """
         <span class="hint mono">topics discovered from the text</span>
       </div>
       <div style="padding:14px 20px 0">
-        <p class="emb-note">Built from scratch from the article <b>embeddings</b>, <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Embeds each story's <b>headline + body</b>. Off-topic stories fall out as <i>Other</i>.</p>
+        <p class="emb-note">Built from scratch from the article <b>embeddings</b> (BGE), <b>not</b> the keyword buckets. HDBSCAN groups the stories into <b>data-driven clusters</b>, each named by the key phrase whose meaning sits closest to the cluster (embedding similarity × distinctiveness). Topics are <b>tracked across days</b>, so a topic keeps the same name and colour build to build. Embeds each story's <b>headline + body</b>; off-topic stories fall out as <i>Other</i>.</p>
         <div class="emb-tabs" id="embTabs"></div>
       </div>
       <div class="emb-wrap">
