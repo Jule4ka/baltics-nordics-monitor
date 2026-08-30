@@ -36,7 +36,18 @@ jobs:
       # Python) can't sink the daily publish — render.py then builds a TF-IDF-only page.
       continue-on-error: true
       run: pip install fastembed umap-learn
+    - name: Install topic-labelling extra (optional — falls back to keyword labels)
+      # Anthropic SDK powers the LLM-written descriptive topic labels. Cluster labels
+      # are cached by content (analysis/emb_cache/labels.json), so only NEW/changed
+      # clusters cost an API call. continue-on-error + graceful fallback in code mean
+      # a missing key or wheel just yields the keyword labels, never a failed build.
+      continue-on-error: true
+      run: pip install anthropic
     - name: Build defence/geopolitics topic map from the latest committed data
+      # ANTHROPIC_API_KEY (repo secret) enables the descriptive LLM topic labels;
+      # without it the build still succeeds with the offline keyword labels.
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: python topic_analysis.py
     - name: Commit and push the rebuilt dashboard
       run: |-

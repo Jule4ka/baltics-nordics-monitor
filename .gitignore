@@ -115,6 +115,7 @@ celerybeat.pid
 
 # Environments
 .env
+.anthropic_key
 .venv
 env/
 venv/

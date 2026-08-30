@@ -1,0 +1,4 @@
+- use a map somehow?
+- do I need 2 ways to extract topics?
+- use like Bumba (intelligence tools)
+- think which essay I can write on these stories (maybe somethign from anomalies??)

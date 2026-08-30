@@ -18,7 +18,7 @@ What it does, for the "content" scope — headline + full article body:
      compare directions, not distance, because in high dimensions Euclidean
      distance collapses).
   3. HDBSCAN over the low-D embedding -> data-driven clusters (no preset count;
-     genuinely off-topic stories fall out as "Unclustered" noise).
+     genuinely off-topic stories fall out as "Other" noise).
   4. c-TF-IDF per cluster -> the terms most distinctive to that cluster, used as
      its semantic label/keywords. Points are coloured by cluster.
   5. Cosine nearest-neighbours per article -> anomalies: the most ISOLATED
@@ -179,7 +179,7 @@ def _heatmap(pts, clusters):
     daily cut without most cells being 1-2 stories."""
     weeks = sorted({w for p in pts if (w := _week_start(p["d"]))})
     widx = {w: i for i, w in enumerate(weeks)}
-    real = [c for c in clusters if c["label"] != "Unclustered"]
+    real = [c for c in clusters if c["label"] != "Other"]
 
     def agg(subset):
         cells = []
@@ -225,7 +225,7 @@ def _cluster(emb):
 # A noise point joins a cluster if its cosine to that centroid clears the cluster's
 # admission bar: the NOISE_ADMIT_PCTL-th percentile of members' own cosine to the
 # centroid. LOWER percentile = lower bar = MORE points absorbed out of noise; higher
-# keeps more as Unclustered. 10 ≈ "closer than the cluster's most peripheral tenth",
+# keeps more as Other. 10 ≈ "closer than the cluster's most peripheral tenth",
 # which folds in the obvious border cases while leaving genuine outliers alone.
 # Reassignment runs in the ORIGINAL embedding space (cosine), not the UMAP layout,
 # à la BERTopic's reduce_outliers.
@@ -234,7 +234,7 @@ NOISE_ADMIT_PCTL = 10
 
 def _reduce_noise(emb, labels):
     """Fold HDBSCAN's -1 noise into the nearest real cluster when it's a plausible
-    member, leaving only genuinely isolated stories as 'Unclustered'.
+    member, leaving only genuinely isolated stories as 'Other'.
 
     HDBSCAN is deliberately conservative — a topically narrow feed leaves lots of
     low-density border points flagged noise even though they sit right beside a
@@ -265,7 +265,7 @@ def _reduce_noise(emb, labels):
             admitted += 1
     if admitted:
         print(f"[cluster] reduced noise: {admitted}/{len(noise)} outliers reassigned, "
-              f"{len(noise) - admitted} left Unclustered")
+              f"{len(noise) - admitted} left Other")
     return labels
 
 
@@ -274,13 +274,17 @@ _LABEL_STOP = set(config.EXTRA_STOP) | set(config.FREQ_STOP) | {
     "say", "says", "said", "told", "reports", "report", "reported", "week",
     "government", "minister", "ministry", "official", "officials", "plan", "plans",
     "photo",                                           # caption/credit boilerplate
-    # Feed-universal fillers: this is a DEFENCE feed, so "defence/military/security"
-    # sit in almost every cluster and carry no distinguishing signal — yet c-TF-IDF
-    # still hands them out as the theme word, so two clusters both read "defence · x".
-    # Drop them from LABELS (not from the embeddings) so the next-most-distinctive
-    # term surfaces instead.
+}
+
+# Feed-universal fillers: this is a DEFENCE feed, so "defence/military/war" sit in
+# almost every cluster and carry no distinguishing signal AS A SOLO WORD — but they
+# ARE wanted inside a phrase ("ukraine war", "air defence", "armed forces"). So we do
+# NOT stopword them out of the vocabulary (that would block those phrases); instead a
+# single filler word is heavily penalised in ranking, while phrases containing one are
+# not. Affects LABELS only, never the embeddings/clustering.
+_FILLER = {
     "defense", "defenses", "defence", "defences", "military", "militaries",
-    "security", "forces", "army", "war", "warfare",
+    "security", "forces", "force", "army", "armies", "war", "warfare",
 }
 
 # Labels must read as ENGLISH. The sources are English editions of Baltic
@@ -338,7 +342,7 @@ def _ctfidf_labels(texts, labels, topn=3):
     try:
         from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
         stop = list(ENGLISH_STOP_WORDS | _LABEL_STOP)
-        cv = CountVectorizer(stop_words=stop, ngram_range=(1, 2),
+        cv = CountVectorizer(stop_words=stop, ngram_range=(1, 3),
                              token_pattern=r"(?u)\b[a-zA-Z][a-zA-Z]+\b", min_df=1)
         X = cv.fit_transform(docs).toarray().astype(float)      # (n_classes, n_terms)
     except ValueError:
@@ -357,50 +361,33 @@ def _ctfidf_labels(texts, labels, topn=3):
     present = (cv.transform(texts) > 0)                          # (n_articles, n_terms) binary
     members = {cid: [i for i, l in enumerate(labels) if l == cid] for cid in ids}
 
-    # Per-cluster ranked candidates (morphological variants collapsed WITHIN a cluster).
+    # Prefer readable MULTI-WORD phrases over cryptic single tokens:
+    #   • n-gram length boost   — a bigram outranks a unigram of equal c-TF-IDF, so
+    #     "ukraine war" surfaces above "ukraine".
+    #   • solo-filler penalty   — a lone feed-universal word (war/defence/…) is pushed
+    #     down, but the SAME word inside a phrase is not (it never gets the penalty).
+    #   • phrase-friendly recurrence — a unigram must recur in ~15% of the cluster, but
+    #     a phrase only needs to appear in a few stories (phrases are naturally rarer),
+    #     otherwise the strict docfreq bar filters every phrase out.
+    lengths = np.array([t.count(" ") + 1 for t in vocab])
+    phrase_boost = np.where(lengths >= 3, 2.4, np.where(lengths == 2, 2.0, 1.0))
+    solo_filler = np.array([1.0 if (lengths[j] == 1 and vocab[j] in _FILLER) else 0.0
+                            for j in range(len(vocab))])
     cand = {}
     for row, cid in enumerate(ids):
         idx = members[cid]
         dfreq = np.asarray(present[idx].sum(axis=0)).ravel() if idx else np.zeros(len(vocab))
-        minhits = max(2, int(round(0.15 * len(idx))))           # ≥2 stories and ≥15% of the cluster
-        ranked = [vocab[j] for j in np.argsort(-ctfidf[row])
-                  if ctfidf[row, j] > 0 and dfreq[j] >= minhits][:20]
-        cand[cid] = _dedupe_terms(ranked, 8)
+        uni_min = max(2, int(round(0.15 * len(idx))))           # unigram: recurs across the cluster
+        thresh = np.where(lengths >= 2, 2, uni_min)             # phrase: just needs to recur ≥2×
+        score = ctfidf[row] * phrase_boost * np.where(solo_filler > 0, 0.12, 1.0)
+        ranked = [vocab[j] for j in np.argsort(-score)
+                  if ctfidf[row, j] > 0 and dfreq[j] >= thresh[j]][:25]
+        cand[cid] = _dedupe_terms(ranked, 8)                    # collapse morphological overlaps
 
-    # Keep the MEANING but still tell look-alike clusters apart: build each label as
-    # a "theme · facet" pair — the theme is the cluster's TOP distinctive term (kept
-    # even when shared with other clusters), and the facet is its best term that is
-    # DISTINCT to it. So two related clusters read as e.g. 'defence · systems' vs
-    # 'drone · airspace' — each keeps its own most-distinctive word and the facet
-    # carries the difference, rather than one being stripped of meaning.
-    from collections import Counter
-    share = Counter(t for cid in ids for t in cand[cid][:4])       # how many clusters top-rank each term
-
-    def stems(t):
-        return {w[:4] for w in t.split()}
-
-    out = {}
-    used_facets = set()
-    for cid in ids:
-        terms = cand[cid]
-        theme = terms[0]                                  # top term — kept, shared or not
-        tstem = stems(theme)
-        # facet: prefer a term UNIQUE to this cluster and not already used as a facet
-        facet, backup = None, None
-        for t in terms[1:]:
-            s = stems(t)
-            if s & tstem:
-                continue
-            backup = backup or t
-            if share[t] == 1 and not (s & used_facets):
-                facet = t
-                break
-        facet = facet or backup
-        label = [theme] + ([facet] if facet and topn >= 2 else [])
-        if facet:
-            used_facets |= stems(facet)
-        out[cid] = label[:topn]
-    return out
+    # Label = the top few distinctive terms (phrases first). Cross-cluster distinctness
+    # comes naturally now that each label carries 2+ terms; exact-duplicate labels are
+    # broken apart downstream by extending with the next term.
+    return {cid: cand[cid][:topn] for cid in ids}
 
 
 def _palette(k):
@@ -425,7 +412,108 @@ def _palette(k):
     return light, dark
 
 
-NOISE_LIGHT, NOISE_DARK = "#8f8677", "#847b6c"          # "Unclustered" grey
+NOISE_LIGHT, NOISE_DARK = "#8f8677", "#847b6c"          # "Other" grey
+
+
+# ── LLM topic labels (descriptive phrases; graceful fallback to keywords) ────
+# The c-TF-IDF terms make short but cryptic labels. When an Anthropic key is
+# available, upgrade them to a readable descriptive phrase per cluster — one API
+# call per build, cached by cluster CONTENT so unchanged clusters cost nothing on
+# repeat builds. If the SDK/key is missing or the call fails, we keep the keyword
+# labels (mirrors how the page already degrades to TF-IDF when embeddings are off).
+LABEL_MODEL = "claude-opus-5"
+
+
+def _llm_call(samples):
+    """samples: {cid: {"keywords": [...], "headlines": [...]}} -> {cid: phrase}.
+    Returns {} (caller keeps keyword labels) if the SDK/key is missing or errors."""
+    try:
+        import anthropic
+    except Exception as e:
+        print(f"[label] anthropic SDK unavailable ({e.__class__.__name__}); keeping keyword labels")
+        return {}
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        print("[label] no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN set; keeping keyword labels")
+        return {}
+    import json
+    blocks = []
+    for cid, s in sorted(samples.items()):
+        heads = "\n".join(f"     - {h}" for h in s["headlines"])
+        blocks.append(f"Cluster {cid}\n   keywords: {', '.join(s['keywords']) or '(none)'}\n"
+                      f"   sample headlines:\n{heads}")
+    prompt = (
+        "You are labelling clusters of Baltic & Nordic defence / geopolitics news "
+        "for a monitoring dashboard.\n\n"
+        "For EACH cluster below, write a short, specific, descriptive topic label: a "
+        "natural noun phrase of about 3 to 6 words that captures what the cluster is "
+        "about. Not a single keyword, not a full sentence. Make every label clearly "
+        "distinct from the others. No trailing punctuation, no surrounding quotes.\n\n"
+        + "\n\n".join(blocks)
+        + "\n\nReturn ONLY a JSON object mapping each cluster id (as a string) to its "
+          'label, e.g. {"0": "Russia\'s war on Ukraine", '
+          '"1": "NATO troop presence in the Baltics"}.'
+    )
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model=LABEL_MODEL, max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()   # tolerate fences
+        data = json.loads(text)
+        labels = {}
+        for cid in samples:
+            v = data.get(str(cid), data.get(cid))
+            if isinstance(v, str) and v.strip():
+                labels[cid] = v.strip().strip('"')
+        print(f"[label] wrote {len(labels)}/{len(samples)} topic labels via {LABEL_MODEL}")
+        return labels
+    except Exception as e:
+        print(f"[label] labelling failed ({e.__class__.__name__}: {e}); keeping keyword labels")
+        return {}
+
+
+def _llm_labels(samples):
+    """Content-cached wrapper around _llm_call: only NEW/changed clusters hit the API."""
+    if not samples:
+        return {}
+    import json
+    import hashlib
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    cache_path = os.path.join(CACHE_DIR, "labels.json")
+    cache = {}
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+
+    def key(s):
+        blob = json.dumps(s, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        return hashlib.sha1(blob).hexdigest()
+
+    out, todo = {}, {}
+    for cid, s in samples.items():
+        k = key(s)
+        if k in cache:
+            out[cid] = cache[k]
+        else:
+            todo[cid] = (k, s)
+    if todo:
+        fresh = _llm_call({cid: s for cid, (k, s) in todo.items()})
+        for cid, (k, s) in todo.items():
+            if cid in fresh:
+                out[cid] = fresh[cid]
+                cache[k] = fresh[cid]
+        if fresh:
+            try:
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(cache, f, ensure_ascii=False)
+            except Exception:
+                pass
+    return out
 
 
 # ── build one scope's payload ───────────────────────────────────────────────
@@ -441,9 +529,9 @@ def build_view(df, scope, model):
     _nn, iso = _neighbors(emb, 5)
     raw = _cluster(emb)                                # HDBSCAN labels (-1 = noise)
     raw = _reduce_noise(emb, raw)                      # fold border points out of noise
-    # at most 2 terms per cluster, so the legend, tone rows AND the click-to-list
-    # all show the SAME label (a redundant cluster collapses to a single word)
-    keywords = _ctfidf_labels(texts, raw, topn=2)      # {raw_id: [term, ...]}
+    # Up to 4 ranked distinctive terms per cluster (phrases preferred). The LABEL joins
+    # the top 2; the full list is kept as `keywords` for the expandable chips.
+    keywords = _ctfidf_labels(texts, raw, topn=4)      # {raw_id: [term, ...]}
     tone = _tone(emb, model)                           # per-article escalation tone
 
     # Renumber clusters 0..K-1 by size (largest first) for stable colours; noise last.
@@ -453,17 +541,60 @@ def build_view(df, scope, model):
     K = len(real)
     light, dark = _palette(K)
 
-    clusters = []
+    # Offline label = the cluster's top 2 distinctive terms (phrases preferred), joined
+    # with " · " — e.g. "ukraine war · russian threat". Kept UNIQUE by extending with
+    # the next term on an exact collision. These are UPGRADED to a single fluent phrase
+    # by the LLM below whenever a key is available.
+    used_labels = set()
+    def _phrase_label(kw, i):
+        if not kw:
+            return f"topic {i + 1}"
+        # Lead with a multi-word phrase if one sits among the top candidates; then add
+        # the next distinct term (skip morphological overlaps with the lead).
+        lead = next((t for t in kw[:2] if " " in t), kw[0])
+        seen = {w[:4] for w in lead.split()}
+        parts = [lead]
+        for t in kw:
+            if t == lead:
+                continue
+            st = {w[:4] for w in t.split()}
+            if st & seen:
+                continue
+            parts.append(t)
+            seen |= st
+            if len(parts) >= 2:
+                break
+        lab = " · ".join(parts)
+        extra = [t for t in kw if t not in parts]
+        while lab in used_labels and extra:             # disambiguate exact duplicates
+            lab += " · " + extra.pop(0)
+        used_labels.add(lab)
+        return lab
+
+    heads = df["headline"].fillna("").tolist()
+    samples, clusters = {}, []
     for i, c in enumerate(real):
         kw = keywords.get(c, [])
+        # representative headlines for the label prompt: closest to the cluster centroid
+        members = [j for j in range(len(raw)) if raw[j] == c]
+        if members:
+            cen = emb[members].mean(axis=0)
+            cen = cen / (np.linalg.norm(cen) or 1.0)
+            order = sorted(members, key=lambda j: -float(emb[j] @ cen))
+            samples[i] = {"keywords": kw, "headlines": [heads[j] for j in order[:6] if heads[j]]}
         clusters.append({
-            "id": i, "label": " · ".join(kw[:2]) or f"topic {i + 1}",
+            "id": i, "label": _phrase_label(kw, i),
             "keywords": kw, "size": int((raw == c).sum()),
             "color": light[i], "colorDark": dark[i],
         })
+    # Upgrade the keyword labels to LLM-written descriptive phrases when possible.
+    phrases = _llm_labels(samples)
+    for cl in clusters:
+        if cl["id"] in phrases:
+            cl["label"] = phrases[cl["id"]]
     if (raw == -1).any():                              # noise bucket -> last id
         clusters.append({
-            "id": K, "label": "Unclustered", "keywords": [],
+            "id": K, "label": "Other", "keywords": [],
             "size": int((raw == -1).sum()),
             "color": NOISE_LIGHT, "colorDark": NOISE_DARK,
         })
@@ -548,7 +679,7 @@ EMB_CSS = """
 .tone-sub{margin:0 0 12px;font-size:12px;color:var(--muted);line-height:1.5;}
 .tone-line{display:block;width:100%;height:56px;margin:0 0 6px;overflow:visible;}
 .tone-heat{display:grid;gap:2px;overflow-x:auto;font-size:11px;}
-.tone-heat .th-row{display:grid;grid-template-columns:var(--labw,150px) 1fr;gap:6px;align-items:center;}
+.tone-heat .th-row{display:grid;grid-template-columns:var(--labw,210px) 1fr;gap:6px;align-items:center;}
 .tone-heat .th-lab{color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   text-align:right;font-size:11.5px;}
 .tone-heat .th-cells{display:grid;gap:2px;grid-auto-flow:column;grid-auto-columns:1fr;}
@@ -558,7 +689,29 @@ EMB_CSS = """
 .tone-heat .th-head .th-lab{color:var(--faint);font-weight:400;}
 .tone-heat .th-all{padding-bottom:4px;margin-bottom:2px;border-bottom:1px solid var(--border);}
 .tone-heat .th-all .th-cell{height:26px;font-size:10.5px;font-weight:600;}
+.tone-heat .th-cell.th-hit{cursor:pointer;}
 .tone-heat .th-cell[data-m]:hover{outline:2px solid var(--ink);outline-offset:-2px;}
+.tone-heat .th-cell.sel{outline:2.5px solid var(--ink);outline-offset:-2px;box-shadow:0 0 0 2px var(--panel);}
+/* click-to-list articles for a tone cell */
+.tone-arts{margin-top:12px;}
+.tone-arts:empty{display:none;}
+.tone-arts .ta-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);
+  padding:8px 12px;background:color-mix(in srgb,var(--gold) 10%,var(--panel));border:1.5px solid var(--border);
+  border-radius:6px 6px 0 0;font-variant-numeric:tabular-nums;}
+.tone-arts .ta-head b{color:var(--ink);}
+.tone-arts .ta-x{margin-left:auto;background:none;border:0;color:var(--faint);cursor:pointer;font-size:14px;
+  line-height:1;padding:2px 4px;}
+.tone-arts .ta-x:hover{color:var(--accent);}
+.tone-arts .ta-list{list-style:none;margin:0;padding:2px 12px 6px;border:1.5px solid var(--border);border-top:0;
+  border-radius:0 0 6px 6px;}
+.tone-arts .ta-list li{padding:7px 0;border-top:1px solid var(--border2);font-size:12.5px;}
+.tone-arts .ta-list li:first-child{border-top:0;}
+.tone-arts .ta-list a{color:var(--muted);text-decoration:none;display:flex;align-items:baseline;gap:8px;}
+.tone-arts .ta-list a:hover{color:var(--accent);}
+.tone-arts .ta-tone{flex:none;font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;
+  padding:1px 6px;border-radius:3px;min-width:34px;text-align:center;}
+.tone-arts .ta-list .src{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);margin-top:2px;}
 """
 
 _EMB_SECTION = """
@@ -569,7 +722,7 @@ _EMB_SECTION = """
         <span class="hint mono">topics discovered from the text</span>
       </div>
       <div style="padding:14px 20px 0">
-        <p class="emb-note">Built from scratch from the article <b>embeddings</b>, <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Embeds each story's <b>headline + body</b>. Off-topic stories fall out as <i>Unclustered</i>.</p>
+        <p class="emb-note">Built from scratch from the article <b>embeddings</b>, <b>not</b> the keyword buckets above. HDBSCAN groups the stories into <b>data-driven clusters</b>; each cluster is named by its own most distinctive terms (class-based TF-IDF). Colour = discovered cluster. Embeds each story's <b>headline + body</b>. Off-topic stories fall out as <i>Other</i>.</p>
         <div class="emb-tabs" id="embTabs"></div>
       </div>
       <div class="emb-wrap">
@@ -579,9 +732,10 @@ _EMB_SECTION = """
       </div>
       <div class="emb-tone">
         <h4>Escalation tone — is coverage heating up? <span class="tone-key"><i class="tk-neg"></i>de-escalation<i class="tk-mid"></i>baseline<i class="tk-pos"></i>escalation</span></h4>
-        <p class="tone-sub">Each story scored on an <b>escalation vs de-escalation</b> axis (cosine to anchor phrases in the same embedding space), <i>relative to this feed's own baseline</i>. Rows = discovered topics by week; the top <b>All coverage</b> row is the overall trend. Colour = mean tone; deeper red = more escalatory. Number = articles that week.</p>
+        <p class="tone-sub">Each story scored on an <b>escalation vs de-escalation</b> axis (cosine to anchor phrases in the same embedding space), <i>relative to this feed's own baseline</i>. Rows = discovered topics by week; the top <b>All coverage</b> row is the overall trend. Colour = mean tone; deeper red = more escalatory. Number = articles that week — <b>click any number to list those articles</b>.</p>
         <div class="tone-heat" id="toneHeat"></div>
         <div class="emb-tip" id="toneTip"></div>
+        <div class="tone-arts" id="toneArts"></div>
       </div>
       <div class="emb-anom">
         <h4 id="embTopH">Discovered topics</h4>
@@ -678,9 +832,9 @@ _EMB_SCRIPT = r"""
       let out='';
       for(let i=0;i<W;i++){const c=byW[i];
         out += c
-          ? `<div class="th-cell" style="background:${toneColor(c.m)};color:${toneInk(c.m)}" data-l="${label}" data-w="${i}" data-m="${c.m}" data-n="${c.n}">${c.n}</div>`
+          ? `<div class="th-cell th-hit" style="background:${toneColor(c.m)};color:${toneInk(c.m)}" data-c="${id}" data-l="${label}" data-w="${i}" data-m="${c.m}" data-n="${c.n}">${c.n}</div>`
           : `<div class="th-cell" style="background:transparent"></div>`;}
-      return `<div class="th-row ${cls||''}"><div class="th-lab" style="color:${color||'var(--faint)'}">${label}</div><div class="th-cells">${out}</div></div>`;
+      return `<div class="th-row ${cls||''}"><div class="th-lab" title="${label}" style="color:${color||'var(--faint)'}">${label}</div><div class="th-cells">${out}</div></div>`;
     };
     let html = `<div class="th-row th-head"><div class="th-lab">topic</div><div class="th-cells">`
       + T.weeks.map(w=>`<div class="th-cell">${wk(w)}</div>`).join('') + `</div></div>`;
@@ -688,14 +842,39 @@ _EMB_SCRIPT = r"""
     T.heat.forEach(r=> html += rowHtml(r.c, NAME[r.c], COL[r.c], r.cells));
     heatEl.innerHTML = html;
     const tt=document.getElementById('toneTip');
+    const artsEl=document.getElementById('toneArts'); artsEl.innerHTML=''; let openKey=null;
+    // Monday-start ISO week for a 'YYYY-MM-DD' date — matches _week_start() server-side
+    const weekStart=d=>{const [y,m,da]=d.slice(0,10).split('-').map(Number);
+      const dt=new Date(Date.UTC(y,m-1,da)); dt.setUTCDate(dt.getUTCDate()-((dt.getUTCDay()+6)%7));
+      return dt.toISOString().slice(0,10);};
     heatEl.querySelectorAll('.th-cell[data-m]').forEach(el=>{
       el.onmousemove=e=>{const wr=el.closest('.emb-tone'), rc=wr.getBoundingClientRect();
         const m=+el.dataset.m;
-        tt.innerHTML=`<b>${el.dataset.l}</b><span class="m">${wk(T.weeks[+el.dataset.w])} · ${el.dataset.n} stories<br>mean tone ${m>0?'+':''}${m.toFixed(2)}</span>`;
+        tt.innerHTML=`<b>${el.dataset.l}</b><span class="m">${wk(T.weeks[+el.dataset.w])} · ${el.dataset.n} stories<br>mean tone ${m>0?'+':''}${m.toFixed(2)} · click to list</span>`;
         tt.style.opacity=1;
         let tx=e.clientX-rc.left+14, ty=e.clientY-rc.top+14;
         if(tx+180>wr.clientWidth)tx=e.clientX-rc.left-190; tt.style.left=tx+'px'; tt.style.top=ty+'px';};
       el.onmouseleave=()=>{tt.style.opacity=0;};
+      el.onclick=()=>{
+        const cid=+el.dataset.c, wi=+el.dataset.w, key=cid+':'+wi, wkStr=T.weeks[wi];
+        heatEl.querySelectorAll('.th-cell.sel').forEach(x=>x.classList.remove('sel'));
+        if(openKey===key){openKey=null; artsEl.innerHTML=''; return;}   // toggle closed
+        openKey=key; el.classList.add('sel');
+        const m=+el.dataset.m;
+        const arts=v.points.filter(p=>(cid===-1||p.c===cid)&&weekStart(p.d)===wkStr)
+          .sort((a,b)=>(a.d<b.d?1:a.d>b.d?-1:0));
+        const items=arts.map(p=>{
+          const t=p.to, sign=t>0?'+':'', lab=t>=.15?'escalatory':t<=-.15?'de-escalation':'neutral';
+          return `<li><a href="${p.u}" target="_blank" rel="noopener">`
+            +`<span class="ta-tone" style="background:${toneColor(t)};color:${toneInk(t)}" title="tone ${sign}${t.toFixed(2)} · ${lab}">${sign}${t.toFixed(2)}</span>`
+            +`${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`;}).join('');
+        artsEl.innerHTML=`<div class="ta-head"><b>${el.dataset.l}</b> · week of ${wk(wkStr)}`
+          +` · ${arts.length} ${arts.length===1?'story':'stories'} · mean tone ${m>0?'+':''}${m.toFixed(2)}`
+          +`<button class="ta-x" aria-label="close">✕</button></div><ul class="ta-list">${items}</ul>`;
+        artsEl.querySelector('.ta-x').onclick=()=>{openKey=null; artsEl.innerHTML='';
+          heatEl.querySelectorAll('.th-cell.sel').forEach(x=>x.classList.remove('sel'));};
+        artsEl.scrollIntoView({behavior:'smooth',block:'nearest'});
+      };
     });
   }
   function load(){
@@ -714,7 +893,7 @@ _EMB_SCRIPT = r"""
         el.classList.toggle('off'); draw();};
     });
     // discovered-topics list: click a topic to expand the articles inside it
-    document.getElementById('embTopH').textContent=`Discovered topics — ${CL.filter(c=>c.label!=='Unclustered').length} clusters (click to list articles)`;
+    document.getElementById('embTopH').textContent=`Discovered topics — ${CL.filter(c=>c.label!=='Other').length} clusters (click to list articles)`;
     const artsFor = id => v.points.filter(p=>p.c===id)
       .sort((a,b)=> (a.d<b.d?1:a.d>b.d?-1:0))          // most recent first
       .map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}`
@@ -735,7 +914,7 @@ _EMB_SCRIPT = r"""
     });
     // anomalies (most isolated)
     const li = arr => arr.map(p=>{
-      const nm=NAME[p.c]&&NAME[p.c]!=='Unclustered'?`<span class="emb-badge">${NAME[p.c]}</span>`:'';
+      const nm=NAME[p.c]&&NAME[p.c]!=='Other'?`<span class="emb-badge">${NAME[p.c]}</span>`:'';
       return `<li><a href="${p.u}" target="_blank" rel="noopener">${nm}${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`;
     }).join('');
     const anom=v.points.slice().sort((a,b)=>b.iso-a.iso).slice(0,ANOM_N);
