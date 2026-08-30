@@ -28,7 +28,7 @@ jobs:
       with:
         python-version: '3.14'
     - name: Install analysis packages (core — must succeed)
-      run: pip install lxml pandas requests beautifulsoup4 html5lib scikit-learn
+      run: pip install lxml pandas requests beautifulsoup4 html5lib scikit-learn ftfy
     - name: Install embedding extras (optional — page degrades gracefully if this fails)
       # fastembed + umap-learn power the semantic-embeddings sections of the page.
       # The committed analysis/emb_cache keeps this cheap: only NEW articles are

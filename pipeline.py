@@ -33,10 +33,24 @@ from config import (
 )
 
 
+try:
+    import ftfy as _ftfy
+except Exception:                                     # optional; falls back to the heuristic below
+    _ftfy = None
+
+
 def fix_mojibake(s):
-    """Repair double-encoded UTF-8 (lrt_lt export)."""
+    """Repair mis-decoded / double-encoded text in scraped headlines.
+
+    Prefers ftfy (fixes the full range — 'NausÄda' -> 'Nausėda', 'chiefâ€™s' -> 'chief's');
+    falls back to a cp1252->utf-8 heuristic when ftfy isn't installed."""
     if not isinstance(s, str):
         return ""
+    if _ftfy is not None:
+        try:
+            return _ftfy.fix_text(s)
+        except Exception:
+            pass
     if any(m in s for m in ["Ã", "â€", "Å", "Â", " Â"]):
         try:
             return s.encode("cp1252", "ignore").decode("utf-8", "ignore")
