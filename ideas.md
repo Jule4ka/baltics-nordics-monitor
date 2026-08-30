@@ -3,16 +3,25 @@
 - use like Bumba (intelligence tools)
 - think which essay I can write on these stories (maybe somethign from anomalies??)
 
+## Entity feature ideas (brainstorm)
+done:
+- [x] 1. entity mention trends over time (per-entity weekly sparkline)
+- [x] 2. entity coverage tone (mean escalation-tone chip)
+- [x] 3. co-occurrence — "seen alongside" (entities sharing articles)
+- [x] 5. entity x country split (EE/LV/LT mini-bar)
+todo / maybe:
+- [ ] 4. click an entity to cross-filter the map + other panels
+- [ ] 6. plot the GPE places on the Baltic map (intensity)
 
-Ideas for the entities — here's what I'd do, roughly best-first:
+## Parked ideas
+- LLM-written topic labels + entity alias canonicalisation (needs ANTHROPIC_API_KEY)
+- tune topic-tracking match threshold if topics drift too much over time
+- trend/label options tried: c-TF-IDF vs KeyBERT vs blend (blend won); representative-headline labels (not used)
 
-1. Entity mention trends over time — the same river/sparkline treatment for people & orgs: when did "Putin", "NATO", "CIA" surge? Reuses the streamgraph infra you just got. High synergy.
-2. Entity tone — average escalation-tone of the articles each entity appears in → "who shows up in the hottest coverage" (a red↔blue chip next to each name). Reuses the sentiment score already computed.
-3. Co-occurrence / "seen alongside" — for a clicked entity, show which other entities share its articles (Putin ↔ Zelensky ↔ NATO). Reveals the relationship web; could be a mini network graph.
-4. Entity → cross-filter — click an entity to highlight its articles on the semantic map and filter the other panels. Turns entities into a lens over everything.
-5. Entity × country — which players dominate Estonian vs Latvian vs Lithuanian coverage (small heatmap).
-6. Places → the map — plot the GPE places as intensity on the existing Baltic map.
-
-My pick: #1 (entity trends) for immediate payoff, or #2 (entity tone) as a cheap, striking addition.
-
-Which appeals? And separately — the interactive trends upgrade is uncommitted; want me to commit it now (and still pending: push everything, and the headline mojibake fix)?
+Full descriptions of the entity ideas (for reference):
+- 1 trends: river/sparkline per entity — when did Putin/NATO/CIA surge?
+- 2 tone: avg escalation-tone of an entity's articles — who's in the hottest coverage (red↔blue chip)
+- 3 co-occurrence: for a clicked entity, other entities sharing its articles (Putin↔Zelensky↔NATO); could grow into a network graph
+- 4 cross-filter: click an entity to highlight its articles on the map + filter other panels
+- 5 country: which players dominate EE vs LV vs LT coverage
+- 6 places→map: plot GPE places as intensity on the Baltic map
