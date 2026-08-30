@@ -50,6 +50,13 @@ def main():
     shares = compute_shares(df_all, df)
     df["body"] = fetch_all(df["url"].tolist())
     df, themes, keywords = analyse(df)
+    # per-article escalation tone (for entity coverage-tone); reuses cached embeddings
+    if args.embed:
+        try:
+            import embeddings_analysis as emb
+            df["tone"] = emb.article_tone(df, args.embed_model or emb.DEFAULT_MODEL)
+        except Exception as e:
+            print(f"[tone] skipped ({type(e).__name__})")
     render(df, themes, keywords, shares, embed=args.embed, embed_model=args.embed_model)
 
     names = [t[0] for t in THEMES] + [THEME_OTHER]

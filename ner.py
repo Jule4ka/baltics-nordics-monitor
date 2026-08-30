@@ -49,11 +49,21 @@ def _clean(s):
     return s
 
 
-def extract_entities(texts, top=15, min_articles=2, body_chars=2000):
-    """texts: iterable of article strings (headline + body). Returns
-    {"people": [...], "orgs": [...], "places": [...]}, each a list of
-    {"name", "n" (articles mentioning it), "arts" (article indices)}, or {} if spaCy is
-    unavailable."""
+def _week(d):
+    """Monday of the ISO week for a 'YYYY-MM-DD' date."""
+    from datetime import date, timedelta
+    y, m, da = (int(x) for x in d[:10].split("-"))
+    dt = date(y, m, da)
+    return (dt - timedelta(days=dt.weekday())).isoformat()
+
+
+def extract_entities(texts, dates=None, sources=None, tones=None,
+                     top=15, min_articles=2, body_chars=2000):
+    """texts: article strings (headline + body). Optional per-article aligned lists:
+    dates ('YYYY-MM-DD'), sources (country code), tones (float). Returns
+    {"people":[...], "orgs":[...], "places":[...], "weeks":[...]}, each entity a dict
+    {name, n, arts, series (weekly counts), tone (mean), countries {code:n}, with
+    (co-mentioned entities)}. Returns {} if spaCy is unavailable."""
     texts = list(texts)
     try:
         import spacy
@@ -118,8 +128,49 @@ def extract_entities(texts, top=15, min_articles=2, body_chars=2000):
         for it in items:
             it["n"] = len(it["arts"])
         items.sort(key=lambda x: -x["n"])
-        out[g] = [{"name": it["name"], "n": it["n"], "arts": sorted(it["arts"])}
-                  for it in items[:top]]
-    total = sum(len(v) for v in out.values())
+        out[g] = items[:top]                            # keep set arts for enrichment below
+
+    # ── enrichment: weekly trend, coverage tone, country split, co-occurrence ──
+    weeks, widx = [], {}
+    if dates is not None:
+        weeks = sorted({_week(d) for d in dates if d})
+        widx = {w: i for i, w in enumerate(weeks)}
+    flat = [it for grp in out.values() for it in grp]
+    for it in flat:
+        arts = it["arts"]
+        if weeks:                                       # 1) weekly trend series
+            series = [0] * len(weeks)
+            for i in arts:
+                w = widx.get(_week(dates[i])) if dates[i] else None
+                if w is not None:
+                    series[w] += 1
+            it["series"] = series
+        if tones is not None:                           # 2) mean coverage tone
+            tv = [tones[i] for i in arts if i < len(tones)]
+            it["tone"] = round(sum(tv) / len(tv), 3) if tv else 0.0
+        if sources is not None:                         # 5) country split
+            cc = {}
+            for i in arts:
+                c = sources[i] if i < len(sources) else ""
+                if c:
+                    cc[c] = cc.get(c, 0) + 1
+            it["countries"] = cc
+    for it in flat:                                     # 3) co-occurrence (shared articles)
+        co = sorted(((len(it["arts"] & o["arts"]), o["name"]) for o in flat if o is not it),
+                    reverse=True)
+        it["with"] = [{"name": nm, "n": n} for n, nm in co if n >= 2][:5]
+
+    result = {}
+    for g, grp in out.items():
+        rows = []
+        for it in grp:
+            row = {"name": it["name"], "n": it["n"], "arts": sorted(it["arts"])}
+            for k in ("series", "tone", "countries", "with"):
+                if k in it:
+                    row[k] = it[k]
+            rows.append(row)
+        result[g] = rows
+    result["weeks"] = weeks
+    total = sum(len(result[g]) for g in ("people", "orgs", "places"))
     print(f"[ner] {total} entities across {len(texts)} articles (people/orgs/places)")
-    return out
+    return result

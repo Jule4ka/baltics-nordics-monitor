@@ -295,11 +295,16 @@ def build_payload(df, themes, keywords, shares):
     d1 = [s["d1"] for s in shares if s["d1"]]
     coverage = {"from": min(d0) if d0 else "", "to": max(d1) if d1 else ""}
     gen_short, gen_full = _now_ams()
-    # named entities (people/orgs/places) via spaCy — degrades to {} if spaCy is absent
+    # named entities (people/orgs/places) via spaCy — degrades to {} if spaCy is absent.
+    # Enriched with per-entity weekly trend, coverage tone, country split + co-occurrence.
     import ner
     body = df["body"].fillna("") if "body" in df.columns else ""
     ent_texts = (df["headline"].fillna("") + ". " + body).tolist()
-    entities = ner.extract_entities(ent_texts)
+    ent_dates = [str(x)[:10] for x in df["scrape_date"]]
+    ent_countries = [SRC_CODE.get(s, "") for s in df["source"]]
+    ent_tones = df["tone"].tolist() if "tone" in df.columns else None
+    entities = ner.extract_entities(ent_texts, dates=ent_dates, sources=ent_countries,
+                                    tones=ent_tones)
     return {
         "generated": gen_short,
         "generatedFull": gen_full,

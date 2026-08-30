@@ -191,8 +191,9 @@ function renderFreq(){
   });
 }
 
-// act 4 — named entities (people / organizations / places); click one to read its articles.
-// Hidden entirely when spaCy produced nothing (the `entities` payload is empty/absent).
+// act 4 — named entities (people / organizations / places). Each row carries a coverage-
+// tone chip, a weekly-mentions sparkline and an EE/LV/LT country strip; click to expand the
+// "seen alongside" co-occurrences + the articles. Hidden entirely when spaCy produced nothing.
 function renderEntities(){
   const E = D.entities || {};
   const box = document.getElementById('entities'); if(!box) return;
@@ -202,17 +203,34 @@ function renderEntities(){
     const panel=document.getElementById('entPanel'), head=document.getElementById('entH');
     if(panel) panel.style.display='none'; if(head) head.style.display='none'; return;
   }
-  const maxn = Math.max(1, ...groups.flatMap(([k])=>(E[k]||[]).map(e=>e.n)));
+  // tone -> red(escalatory)/blue(de-escalatory) mixed from neutral grey by magnitude
+  const entTone = t => { const a=Math.min(1,Math.abs(t||0)), tgt=(t||0)>=0?[208,59,59]:[42,120,214],
+    mix=x=>Math.round(150+(x-150)*a); return `rgb(${mix(tgt[0])},${mix(tgt[1])},${mix(tgt[2])})`; };
+  const spark = s => { if(!s||s.length<2) return '<span class="ent-spark"></span>';
+    const mx=Math.max(1,...s), W=60, H=16,
+      pts=s.map((v,i)=>`${(i/(s.length-1)*W).toFixed(1)},${(H-1-(v/mx)*(H-2)).toFixed(1)}`).join(' ');
+    return `<svg class="ent-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${pts}"/></svg>`; };
+  const geo = cc => { if(!cc) return '<span class="ent-geo"></span>';
+    const o=['EE','LV','LT'], tot=o.reduce((a,c)=>a+(cc[c]||0),0)||1;
+    return `<span class="ent-geo" title="${o.map(c=>c+' '+(cc[c]||0)).join(' · ')}">`
+      + o.map(c=>`<i class="eg ${c.toLowerCase()}" style="width:${((cc[c]||0)/tot*100).toFixed(0)}%"></i>`).join('')
+      + `</span>`; };
   box.innerHTML = groups.map(([k,label])=>{
     const items = E[k]||[]; if(!items.length) return '';
     const rows = items.map(e=>{
       const li = e.arts.map(i=>D.points[i]).filter(Boolean).sort((a,b)=>b.d.localeCompare(a.d))
         .map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
+      const withHtml = (e.with&&e.with.length)
+        ? `<div class="ent-with"><span class="ew-lab">seen alongside</span>`
+          + e.with.map(w=>`<span class="ew-chip">${w.name}<b>${w.n}</b></span>`).join('') + `</div>`
+        : '';
+      const tone = (typeof e.tone==='number')
+        ? `<span class="ent-tone" style="background:${entTone(e.tone)}" title="mean coverage tone ${e.tone>0?'+':''}${e.tone}">${e.tone>0?'+':''}${e.tone.toFixed(1)}</span>`
+        : '<span class="ent-tone blank"></span>';
       return `<div class="ent-item"><div class="ent-row" tabindex="0" role="button" aria-expanded="false">`
-        + `<span class="ent-name">${e.name}</span>`
-        + `<div class="ent-track"><div class="ent-fill" style="width:${(e.n/maxn*100).toFixed(1)}%"></div></div>`
+        + tone + `<span class="ent-name">${e.name}</span>` + spark(e.series) + geo(e.countries)
         + `<span class="ent-n mono">${e.n}</span></div>`
-        + `<ul class="ent-arts">${li}</ul></div>`;
+        + `<div class="ent-arts">${withHtml}<ul>${li}</ul></div></div>`;
     }).join('');
     return `<div class="ent-col"><h3 class="ent-h">${label}</h3>${rows}</div>`;
   }).join('');

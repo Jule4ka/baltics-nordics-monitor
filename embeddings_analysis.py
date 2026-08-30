@@ -697,6 +697,21 @@ def _track_topics(clusters, centroids, scope, model, run_date):
     return result
 
 
+def article_tone(df, model=DEFAULT_MODEL):
+    """Per-article escalation tone aligned to df rows, reusing the cached content-scope
+    embeddings. Lets the main page (entities) show each entity's coverage tone without
+    recomputing embeddings. Returns a list of floats (0.0 on any failure)."""
+    try:
+        urls = df["url"].tolist()
+        texts = (df["headline"].fillna("") + ". " + df["body"].fillna("")).tolist() \
+            if "body" in df.columns else df["headline"].fillna("").tolist()
+        emb = get_embeddings(urls, texts, "content", model)
+        return [round(float(t), 3) for t in _tone(emb, model)]
+    except Exception as e:
+        print(f"[tone] per-article tone unavailable ({type(e).__name__})")
+        return [0.0] * len(df)
+
+
 # ── build one scope's payload ───────────────────────────────────────────────
 def build_view(df, scope, model):
     urls = df["url"].tolist()
