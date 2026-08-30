@@ -176,7 +176,7 @@ def fetch_body(url):
         r = requests.get(url, headers=HEADERS, timeout=12)
         if r.status_code != 200:
             return ""
-        soup = BeautifulSoup(r.text, "html.parser")
+        soup = BeautifulSoup(r.content, "html.parser")   # bytes -> BS detects charset (avoids mojibake)
         for tag in soup(["script", "style", "nav", "footer", "aside", "form"]):
             tag.decompose()
         root = soup.find("article") or soup.find("main") or soup
@@ -295,6 +295,11 @@ def build_payload(df, themes, keywords, shares):
     d1 = [s["d1"] for s in shares if s["d1"]]
     coverage = {"from": min(d0) if d0 else "", "to": max(d1) if d1 else ""}
     gen_short, gen_full = _now_ams()
+    # named entities (people/orgs/places) via spaCy — degrades to {} if spaCy is absent
+    import ner
+    body = df["body"].fillna("") if "body" in df.columns else ""
+    ent_texts = (df["headline"].fillna("") + ". " + body).tolist()
+    entities = ner.extract_entities(ent_texts)
     return {
         "generated": gen_short,
         "generatedFull": gen_full,
@@ -303,5 +308,5 @@ def build_payload(df, themes, keywords, shares):
         "colors": COLORS_LIGHT, "colorsDark": COLORS_DARK,
         "shares": shares, "map": BALTIC_MAP, "coverage": coverage,
         "homes": {SRC_CODE[s]: SRC_HOME[s] for s in SRC_HOME},
-        "edits": find_edits(),
+        "edits": find_edits(), "entities": entities,
     }

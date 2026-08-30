@@ -191,7 +191,40 @@ function renderFreq(){
   });
 }
 
-renderFreq();
+// act 4 — named entities (people / organizations / places); click one to read its articles.
+// Hidden entirely when spaCy produced nothing (the `entities` payload is empty/absent).
+function renderEntities(){
+  const E = D.entities || {};
+  const box = document.getElementById('entities'); if(!box) return;
+  const groups = [['people','People'],['orgs','Organizations'],['places','Places']];
+  const has = groups.some(([k])=>(E[k]||[]).length);
+  if(!has){
+    const panel=document.getElementById('entPanel'), head=document.getElementById('entH');
+    if(panel) panel.style.display='none'; if(head) head.style.display='none'; return;
+  }
+  const maxn = Math.max(1, ...groups.flatMap(([k])=>(E[k]||[]).map(e=>e.n)));
+  box.innerHTML = groups.map(([k,label])=>{
+    const items = E[k]||[]; if(!items.length) return '';
+    const rows = items.map(e=>{
+      const li = e.arts.map(i=>D.points[i]).filter(Boolean).sort((a,b)=>b.d.localeCompare(a.d))
+        .map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}<span class="src">${p.s} · ${p.d}</span></a></li>`).join('');
+      return `<div class="ent-item"><div class="ent-row" tabindex="0" role="button" aria-expanded="false">`
+        + `<span class="ent-name">${e.name}</span>`
+        + `<div class="ent-track"><div class="ent-fill" style="width:${(e.n/maxn*100).toFixed(1)}%"></div></div>`
+        + `<span class="ent-n mono">${e.n}</span></div>`
+        + `<ul class="ent-arts">${li}</ul></div>`;
+    }).join('');
+    return `<div class="ent-col"><h3 class="ent-h">${label}</h3>${rows}</div>`;
+  }).join('');
+  box.querySelectorAll('.ent-row').forEach(row=>{
+    const item = row.parentElement;
+    const toggle=()=>{const open=item.classList.toggle('open'); row.setAttribute('aria-expanded', open);};
+    row.onclick=toggle;
+    row.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
+  });
+}
+
+renderFreq(); renderEntities();
 
 // ── collapsible sections ─────────────────────────────────────────────────────
 // Each `.section-h` becomes a toggle; everything between it and the next

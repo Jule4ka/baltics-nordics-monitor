@@ -36,6 +36,14 @@ jobs:
       # Python) can't sink the daily publish — render.py then builds a TF-IDF-only page.
       continue-on-error: true
       run: pip install fastembed umap-learn
+    - name: Install NER extra (optional — page omits the entities section if this fails)
+      # spaCy + small English model power the "The players" people/orgs/places section.
+      # continue-on-error + graceful fallback in ner.py mean a wheel/model gap just drops
+      # that one section, never the build.
+      continue-on-error: true
+      run: |-
+        pip install spacy
+        python -m spacy download en_core_web_sm
     - name: Install topic-labelling extra (optional — falls back to keyword labels)
       # Anthropic SDK powers the LLM-written descriptive topic labels. Cluster labels
       # are cached by content (analysis/emb_cache/labels.json), so only NEW/changed

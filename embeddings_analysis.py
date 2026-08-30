@@ -868,6 +868,14 @@ EMB_CSS = """
 .emb-arts a:hover{color:var(--accent);}
 .emb-arts .src{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin-top:2px;}
+/* topic-river streamgraph */
+.emb-stream{padding:6px 20px 10px;position:relative;}
+.emb-stream h4{margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);}
+.stream-svg{display:block;width:100%;height:220px;overflow:visible;}
+.stream-band{stroke:var(--panel);stroke-width:.6;transition:opacity .12s;cursor:default;}
+.stream-band.dim{opacity:.22;}
+.stream-axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);
+  font-variant-numeric:tabular-nums;margin-top:2px;}
 /* escalation-tone panel */
 .emb-tone{padding:6px 20px 18px;position:relative;}
 .emb-tone h4{margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);
@@ -932,6 +940,13 @@ _EMB_SECTION = """
         <canvas class="emb-canvas" id="embCanvas"></canvas>
         <div class="emb-legend" id="embLegend"></div>
         <div class="emb-tip" id="embTip"></div>
+      </div>
+      <div class="emb-stream">
+        <h4>Topic river — what's rising, fading, appearing</h4>
+        <p class="tone-sub">Each band is a discovered topic; its thickness is how many articles it drew that week. Watch bands <b>swell and shrink</b>, and new topics <b>appear</b> or old ones <b>vanish</b> along the timeline. Colour = topic (same as the map). Hover a band for the week's count.</p>
+        <svg class="stream-svg" id="topicStream" preserveAspectRatio="none"></svg>
+        <div class="stream-axis" id="streamAxis"></div>
+        <div class="emb-tip" id="streamTip"></div>
       </div>
       <div class="emb-tone">
         <h4>Escalation tone — is coverage heating up? <span class="tone-key"><i class="tk-neg"></i>de-escalation<i class="tk-mid"></i>baseline<i class="tk-pos"></i>escalation</span></h4>
@@ -1026,6 +1041,51 @@ _EMB_SCRIPT = r"""
   function toneInk(t){const [r,g,b]=toneRGB(t);
     return (0.299*r+0.587*g+0.114*b)>150?'rgba(0,0,0,.62)':'rgba(255,255,255,.82)';}
   const wk = s => new Date(s+'T00:00').toLocaleDateString('en',{month:'short',day:'numeric'});
+  // topic river: stacked centred bands (thickness = weekly article count) — topics swell,
+  // shrink, appear and vanish along the weeks. Reuses the tone grid's per-topic counts.
+  function renderStream(v){
+    const svg=document.getElementById('topicStream'), axis=document.getElementById('streamAxis');
+    const tip=document.getElementById('streamTip'), T=v.tone;
+    if(!svg) return;
+    if(!T||!T.weeks||T.weeks.length<2){svg.innerHTML='';if(axis)axis.innerHTML='';return;}
+    const weeks=T.weeks, W=weeks.length;
+    let topics=T.heat.map(r=>{const cnt=new Array(W).fill(0);
+        r.cells.forEach(c=>{cnt[c.w]=c.n;});
+        return {name:NAME[r.c], color:COL[r.c], cnt, total:cnt.reduce((a,b)=>a+b,0)};})
+      .filter(t=>t.total>0);
+    if(!topics.length){svg.innerHTML='';if(axis)axis.innerHTML='';return;}
+    topics.sort((a,b)=>b.total-a.total);
+    const ordered=[]; topics.forEach((t,i)=> i%2?ordered.push(t):ordered.unshift(t));  // big topics centred
+    const Wpx=1000, Hpx=220, pad=8;
+    svg.setAttribute('viewBox',`0 0 ${Wpx} ${Hpx}`);
+    const maxTot=Math.max(1,...weeks.map((_,w)=>ordered.reduce((a,t)=>a+t.cnt[w],0)));
+    const ys=(Hpx-2*pad)/maxTot, xat=w=>(w/(W-1))*Wpx;
+    const top=ordered.map(()=>[]), bot=ordered.map(()=>[]);
+    for(let w=0;w<W;w++){const tot=ordered.reduce((a,t)=>a+t.cnt[w],0);
+      let cur=(Hpx-tot*ys)/2;
+      ordered.forEach((t,k)=>{top[k][w]=cur; cur+=t.cnt[w]*ys; bot[k][w]=cur;});}
+    let html='';
+    ordered.forEach((t,k)=>{
+      let d='';
+      for(let w=0;w<W;w++) d+=(w?'L':'M')+xat(w).toFixed(1)+' '+top[k][w].toFixed(1);
+      for(let w=W-1;w>=0;w--) d+='L'+xat(w).toFixed(1)+' '+bot[k][w].toFixed(1);
+      html+=`<path class="stream-band" d="${d}Z" fill="${t.color}" data-k="${k}"></path>`;
+    });
+    svg.innerHTML=html;
+    if(axis) axis.innerHTML=`<span>${wk(weeks[0])}</span><span>${wk(weeks[(W-1)>>1])}</span><span>${wk(weeks[W-1])}</span>`;
+    const paths=[...svg.querySelectorAll('.stream-band')];
+    paths.forEach(el=>{
+      const t=ordered[+el.dataset.k];
+      el.onmousemove=e=>{const wr=el.closest('.emb-stream'), rc=svg.getBoundingClientRect();
+        const frac=Math.max(0,Math.min(1,(e.clientX-rc.left)/rc.width)), w=Math.round(frac*(W-1));
+        paths.forEach(p=>p.classList.toggle('dim',p!==el));
+        tip.innerHTML=`<b>${t.name}</b><span class="m">${wk(weeks[w])} · ${t.cnt[w]} ${t.cnt[w]===1?'story':'stories'}<br>${t.total} total</span>`;
+        tip.style.opacity=1;
+        const pr=wr.getBoundingClientRect(); let tx=e.clientX-pr.left+14, ty=e.clientY-pr.top+14;
+        if(tx+180>wr.clientWidth)tx=e.clientX-pr.left-190; tip.style.left=tx+'px'; tip.style.top=ty+'px';};
+      el.onmouseleave=()=>{paths.forEach(p=>p.classList.remove('dim')); tip.style.opacity=0;};
+    });
+  }
   function renderTone(v){
     const T=v.tone, heatEl=document.getElementById('toneHeat');
     if(!T||!T.weeks||!T.weeks.length){heatEl.innerHTML='';return;}
@@ -1123,6 +1183,7 @@ _EMB_SCRIPT = r"""
     const anom=v.points.slice().sort((a,b)=>b.iso-a.iso).slice(0,ANOM_N);
     document.getElementById('embAnomH').textContent=`Anomalies — the ${anom.length} most isolated stories`;
     document.getElementById('embAnom').innerHTML = anom.length?li(anom):'<li>none</li>';
+    renderStream(v);
     renderTone(v);
     layout(); draw();
   }
