@@ -615,9 +615,21 @@ OTHER_ID = -1                       # the noise / "Other" bucket's fixed id
 TOPIC_MATCH_MIN = 0.85             # cosine floor to call a new cluster the SAME topic as a stored one
 
 
+# Curated Baltic-folk categorical core (madder red, terracotta, amber, forest, teal, sky,
+# indigo, plum, magenta, maroon) — validated for the data-viz lightness/chroma/contrast
+# checks on both the light-linen and dark-charcoal chart surfaces. (light, dark) per slot.
+_FOLK_LIGHT = ["#c0392b", "#d9682a", "#a67c0a", "#2e8b57", "#0f9a9a",
+               "#2f8fd0", "#2d4ea0", "#7d3f97", "#b0359c", "#8a2f4a"]
+_FOLK_DARK = ["#d35245", "#d37845", "#b08a1c", "#31a05f", "#1f9a9a",
+              "#459ad3", "#4c71cd", "#a453c6", "#ca4fb6", "#c65375"]
+
+
 def _topic_colors(idx):
-    """Stable (light, dark) hex for a topic by its PERMANENT id — golden-angle hue, so a
-    topic keeps its colour across builds and distinct topics stay well separated."""
+    """Stable (light, dark) hex for a topic by its PERMANENT id. The first topics take the
+    curated Baltic-folk palette; the long tail falls back to golden-angle so colours stay
+    distinct for any topic count (and a topic keeps its colour across builds)."""
+    if 0 <= idx < len(_FOLK_LIGHT):
+        return _FOLK_LIGHT[idx], _FOLK_DARK[idx]
     def hsl(h, s, l):
         c = (1 - abs(2 * l - 1)) * s
         x = c * (1 - abs((h / 60) % 2 - 1))
@@ -625,8 +637,8 @@ def _topic_colors(idx):
         r, g, b = [(c, x, 0), (x, c, 0), (0, c, x), (0, x, c),
                    (x, 0, c), (c, 0, x)][int(h // 60) % 6]
         return "#%02x%02x%02x" % (round((r + m) * 255), round((g + m) * 255), round((b + m) * 255))
-    h = (idx * 137.508) % 360
-    return hsl(h, 0.62, 0.46), hsl(h, 0.68, 0.62)
+    h = (idx * 137.508 + 40) % 360
+    return hsl(h, 0.60, 0.47), hsl(h, 0.62, 0.60)
 
 
 def _track_topics(clusters, centroids, scope, model, run_date):
@@ -677,13 +689,14 @@ def _track_topics(clusters, centroids, scope, model, run_date):
             t["last"], t["misses"] = run_date, 0
         else:                                              # brand-new topic
             tid = store["next"]; store["next"] = tid + 1
-            col, cold = _topic_colors(tid)
             t = {"id": tid, "centroid": vround, "label": cl["label"],
-                 "color": col, "colorDark": cold,
                  "first": run_date, "last": run_date, "misses": 0}
             stored.append(t)
-        result[li] = {"id": t["id"], "label": t["label"],
-                      "color": t["color"], "colorDark": t["colorDark"]}
+        # colour is a pure function of the permanent id, so a palette change applies to
+        # every existing topic on the next build (identity/name still persist).
+        col, cold = _topic_colors(t["id"])
+        t["color"], t["colorDark"] = col, cold
+        result[li] = {"id": t["id"], "label": t["label"], "color": col, "colorDark": cold}
 
     for si in range(n_before):                             # age only PRE-EXISTING topics not matched
         if si not in taken:
