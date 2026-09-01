@@ -43,3 +43,21 @@ todo / maybe:
     - stance / framing classification per country (quantify who spins what, beyond the tone axis)
 - [ ] relation extraction between named entities (who-did-what-to-whom) to LABEL the network edges, not just "shared an article"
 - [ ] essay material — mine anomalies + the biggest cross-country tone gaps for a story angle
+
+## More countries vs. deepen the 3? (direction)
+Recommendation: DEEPEN the current 3 first, THEN expand — the current set isn't shallow in
+geography, it's shallow in ANALYSIS. Squeeze insight out of EE/LV/LT before paying the
+multilingual tax to reach a 4th.
+- do first (cheap, high insight): LLM stance/framing per country (upgrades the tone-spread we
+  already show from a number into a read), or trending topics
+- two blockers to clear BEFORE adding countries, do them together:
+    - generalise the hardcoded "3": SRC_CODE, the teal/plum/rose triad, the 3-column story
+      layout, _heatmap rows — so N countries just work
+    - swap to a MULTILINGUAL embedding model (bge-m3) + multilingual NER — the pipeline
+      currently embeds ENGLISH only. Baltic broadcasters have English editions; most Nordic
+      ones (SVT/NRK/DR) don't. Without multilingual, "add Nordics" is stuck on the 1-2 outlets
+      with English feeds and isn't worth the refactor.
+- natural pilot when expanding: Finland / YLE — has a real English edition (works even before
+  bge-m3) and is directly on-topic (Gulf of Finland stories already appear). Bigger payoff comes
+  from native-language sources once bge-m3 is in (how does Finnish/Polish media frame the SAME
+  Baltic Sea incident in its own words).
