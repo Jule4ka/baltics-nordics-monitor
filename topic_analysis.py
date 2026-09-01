@@ -6,7 +6,7 @@ This file is deliberately thin: it just wires the pieces together. The actual
 work lives in focused modules so each part is easy to find and edit:
 
   config.py      sources, the defence KEYWORDS filter, THEME buckets, palette
-  pipeline.py    load -> filter -> fetch -> analyse (TF-IDF / t-SNE, keyword themes)
+  pipeline.py    load -> filter -> fetch -> analyse (regex keyword-bucket themes)
   assets/        report.css / report.html / report.js  (the whole front-end)
   assets.py      loads those three files
   render.py      assembles the self-contained page (embeddings folded into it)

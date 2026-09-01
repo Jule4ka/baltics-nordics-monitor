@@ -123,6 +123,79 @@ def _neighbors(emb, k=5):
     return idx, iso
 
 
+# ── cross-country "same story" matching ─────────────────────────────────────
+# The three feeds are independent newsrooms; when an event matters, EE/LV/LT often
+# cover it separately. We find those shared events by embedding proximity: articles
+# linked ONLY across a country border (cosine >= XCOUNTRY_MIN) are unioned into a
+# "story". A story spanning >=2 countries lets us set the three framings side by
+# side and read the tone spread (who covers it hotter). 0.85 is the elbow from the
+# calibration sweep — tight enough that a story is one event, loose enough to catch
+# translated/independent retellings; below it, whole topics chain into one blob.
+XCOUNTRY_MIN = 0.85
+XCOUNTRY_MAX_STORIES = 14
+
+
+def _cross_country_stories(emb, df, tone, thresh=XCOUNTRY_MIN, cap=XCOUNTRY_MAX_STORIES):
+    """Group articles that report the SAME event across different source countries.
+
+    Returns a list of stories (most countries first, then most recent), each with the
+    single most-central article per country + that country's article count, so the
+    front-end can lay the newsrooms side by side with their escalation tone.
+    """
+    n = len(emb)
+    if n < 2:
+        return []
+    cc = [config.SRC_CODE.get(s, "?") for s in df["source"]]
+    heads = df["headline"].fillna("").tolist()
+    urls = df["url"].tolist()
+    dates = [str(d)[:10] for d in df["scrape_date"]]
+    labels = [config.SRC_LABEL.get(s, s) for s in df["source"]]
+
+    S = emb @ emb.T
+    np.fill_diagonal(S, -1.0)
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    ii, jj = np.where(np.triu(S >= thresh, 1))         # candidate edges (upper triangle)
+    for i, j in zip(ii.tolist(), jj.tolist()):
+        if cc[i] != cc[j]:                             # ONLY cross-border edges seed a story
+            a, b = find(i), find(j)
+            if a != b:
+                parent[a] = b
+
+    comp = {}
+    for i in range(n):
+        comp.setdefault(find(i), []).append(i)
+
+    stories = []
+    for members in comp.values():
+        ctys = {cc[i] for i in members if cc[i] in ("EE", "LV", "LT")}
+        if len(ctys) < 2 or len(members) < 2:
+            continue
+        by = {}
+        for c in ctys:
+            cand = [i for i in members if cc[i] == c]
+            best = max(cand, key=lambda i: sum(float(S[i, k]) for k in members if k != i))
+            by[c] = {"h": heads[best], "u": urls[best], "d": dates[best],
+                     "s": labels[best], "to": round(float(tone[best]), 3), "n": len(cand)}
+        tones = [v["to"] for v in by.values()]
+        stories.append({
+            "span": len(ctys), "size": len(members),
+            "date": max(dates[i] for i in members),
+            "spread": round(max(tones) - min(tones), 3),
+            "by": by,
+        })
+    stories.sort(key=lambda s: (s["span"], s["date"], s["size"]), reverse=True)
+    print(f"[xcountry] {len(stories)} cross-country stories "
+          f"({sum(1 for s in stories if s['span'] == 3)} span all three)")
+    return stories[:cap]
+
+
 # ── escalation tone (embedding-anchored, no extra model) ─────────────────────
 # Tone = how much a story leans toward ESCALATION vs DE-ESCALATION, measured as
 # cosine to two small sets of anchor phrases. Reuses the article embeddings we
@@ -840,7 +913,8 @@ def build_view(df, scope, model):
             "to": round(float(tone[i]), 3),
         })
     return {"scope": scope, "model": model, "points": pts, "clusters": clusters,
-            "tone": _heatmap(pts, clusters)}
+            "tone": _heatmap(pts, clusters),
+            "stories": _cross_country_stories(emb, df, tone)}
 
 
 # ── HTML / CSS / JS fragments (spliced into the main report) ─────────────────
@@ -978,6 +1052,35 @@ EMB_CSS = """
   padding:1px 6px;border-radius:3px;min-width:34px;text-align:center;}
 .tone-arts .ta-list .src{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin-top:2px;}
+
+/* same story, three newsrooms */
+.emb-xc{padding:6px 20px 18px;}
+.emb-xc h4{margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);}
+.xc-list{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
+.xc-story{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel);}
+.xc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 12px;
+  background:color-mix(in srgb,var(--gold) 10%,var(--panel));border-bottom:1px solid var(--border2);
+  font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.xc-head .xc-span{font-weight:800;color:var(--ink);letter-spacing:.05em;text-transform:uppercase;font-size:10px;}
+.xc-head .xc-spread{margin-left:auto;display:inline-flex;align-items:center;gap:6px;}
+.xc-head .xc-spread b{color:var(--ink);}
+.xc-cols{display:grid;grid-template-columns:repeat(var(--cols,3),1fr);}
+.xc-col{padding:11px 13px;border-left:1px solid var(--border2);min-width:0;}
+.xc-col:first-child{border-left:0;}
+.xc-cc{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.05em;
+  text-transform:uppercase;}
+.xc-cc .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.xc-cc.ee .dot{background:var(--ee);}.xc-cc.lv .dot{background:var(--lv);}.xc-cc.lt .dot{background:var(--lt);}
+.xc-cc.ee{color:var(--ee);}.xc-cc.lv{color:var(--lv);}.xc-cc.lt{color:var(--lt);}
+.xc-a{display:block;margin-top:7px;color:var(--ink);text-decoration:none;font-size:13px;line-height:1.32;font-weight:600;}
+.xc-a:hover{color:var(--accent);}
+.xc-meta{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:10px;color:var(--faint);
+  letter-spacing:.04em;text-transform:uppercase;}
+.xc-tone{font-weight:700;padding:1px 6px;border-radius:3px;color:#fff;font-variant-numeric:tabular-nums;
+  text-transform:none;letter-spacing:0;}
+.xc-more{font-size:10px;color:var(--faint);}
+@media (max-width:640px){.xc-cols{grid-template-columns:1fr;}
+  .xc-col{border-left:0;border-top:1px solid var(--border2);}.xc-col:first-child{border-top:0;}}
 """
 
 _EMB_SECTION = """
@@ -1024,6 +1127,11 @@ _EMB_SECTION = """
         <div class="tone-heat" id="toneHeat"></div>
         <div class="emb-tip" id="toneTip"></div>
         <div class="tone-arts" id="toneArts"></div>
+      </div>
+      <div class="emb-xc">
+        <h4>Same story, three newsrooms — how EE / LV / LT cover one event</h4>
+        <p class="tone-sub">The three feeds are independent newsrooms. Articles are matched <b>across borders by meaning</b> (embedding similarity, not shared words), so each row is <b>one event</b> retold by two or three countries. Columns show each country's lead article and its <b>escalation tone</b> — see who frames it hotter. <b>Tone spread</b> = gap between the most- and least-escalatory country.</p>
+        <div class="xc-list" id="xcList"></div>
       </div>
       <div class="emb-anom">
         <h4 id="embTopH">Discovered topics</h4>
@@ -1325,7 +1433,33 @@ _EMB_SCRIPT = r"""
     document.getElementById('embAnom').innerHTML = anom.length?li(anom):'<li>none</li>';
     renderChips(v); renderStream(v); setupStream();
     renderTone(v);
+    renderXC(v);
     layout(); draw();
+  }
+  function renderXC(v){
+    const box=document.getElementById('xcList'); if(!box) return;
+    const st=v.stories||[];
+    if(!st.length){ box.innerHTML='<p class="tone-sub" style="margin:0">No cross-country matches in this window.</p>'; return; }
+    const ORDER=['EE','LV','LT'], NM={EE:'Estonia',LV:'Latvia',LT:'Lithuania'};
+    const toneCol=t=>{const a=Math.min(1,Math.abs(t||0)*2.2),pos=(t||0)>=0,
+      tg=pos?[208,59,59]:[42,120,214],m=x=>Math.round(150+(x-150)*a);
+      return `rgb(${m(tg[0])},${m(tg[1])},${m(tg[2])})`;};
+    const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    box.innerHTML=st.map(s=>{
+      const cts=ORDER.filter(c=>s.by[c]);
+      const cols=cts.map(c=>{const a=s.by[c];
+        const more=a.n>1?`<span class="xc-more">+${a.n-1} more</span>`:'';
+        return `<div class="xc-col">`
+          +`<span class="xc-cc ${c.toLowerCase()}"><span class="dot"></span>${NM[c]}</span>`
+          +`<a class="xc-a" href="${a.u}" target="_blank" rel="noopener">${esc(a.h)}</a>`
+          +`<div class="xc-meta"><span class="xc-tone" style="background:${toneCol(a.to)}">${a.to>0?'+':''}${a.to.toFixed(2)}</span>${esc(a.s)} · ${a.d} ${more}</div>`
+          +`</div>`;}).join('');
+      const spreadTxt = s.span>1 ? `tone spread <b>${s.spread.toFixed(2)}</b>` : '';
+      return `<div class="xc-story">`
+        +`<div class="xc-head"><span class="xc-span">${s.span} countries</span> · ${s.size} articles · latest ${s.date}`
+        +`<span class="xc-spread">${spreadTxt}</span></div>`
+        +`<div class="xc-cols" style="--cols:${cts.length}">${cols}</div></div>`;
+    }).join('');
   }
   function layout(){
     const dpr=devicePixelRatio||1, w=wrap.clientWidth, h=cvs.clientHeight, pad=30;
