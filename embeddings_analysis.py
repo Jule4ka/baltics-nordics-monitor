@@ -688,30 +688,33 @@ OTHER_ID = -1                       # the noise / "Other" bucket's fixed id
 TOPIC_MATCH_MIN = 0.85             # cosine floor to call a new cluster the SAME topic as a stored one
 
 
-# Curated Baltic-folk categorical core (madder red, terracotta, amber, forest, teal, sky,
-# indigo, plum, magenta, maroon) — validated for the data-viz lightness/chroma/contrast
-# checks on both the light-linen and dark-charcoal chart surfaces. (light, dark) per slot.
-_FOLK_LIGHT = ["#c0392b", "#d9682a", "#a67c0a", "#2e8b57", "#0f9a9a",
-               "#2f8fd0", "#2d4ea0", "#7d3f97", "#b0359c", "#8a2f4a"]
-_FOLK_DARK = ["#d35245", "#d37845", "#b08a1c", "#31a05f", "#1f9a9a",
-              "#459ad3", "#4c71cd", "#a453c6", "#ca4fb6", "#c65375"]
+# Curated Baltic-folk categorical core — the colours of a woven josta sash: madder red,
+# juniper teal, amber, folk blue, terracotta rust, forest green, aubergine, linden olive,
+# indigo, chestnut brown. Ordered to ALTERNATE warm/cool so consecutive topic ids stay far
+# apart in hue, earthy (no neon), and with a single purple + no magenta/rose (keeps it
+# ethnic, not "pink"). (light on linen, dark on charcoal) per slot.
+_FOLK_LIGHT = ["#b5382b", "#1f7a80", "#bf9016", "#2f6bb0", "#cf6a2c",
+               "#357d3f", "#6a3d90", "#7d8a24", "#384a9e", "#8a5a2b"]
+_FOLK_DARK = ["#d5564a", "#35aab0", "#d3a52c", "#5b93de", "#e07f45",
+              "#55a862", "#9a6fce", "#a7b545", "#6f78d8", "#c08a52"]
 
 
 def _topic_colors(idx):
     """Stable (light, dark) hex for a topic by its PERMANENT id. The first topics take the
-    curated Baltic-folk palette; the long tail falls back to golden-angle so colours stay
-    distinct for any topic count (and a topic keeps its colour across builds)."""
-    if 0 <= idx < len(_FOLK_LIGHT):
-        return _FOLK_LIGHT[idx], _FOLK_DARK[idx]
-    def hsl(h, s, l):
-        c = (1 - abs(2 * l - 1)) * s
-        x = c * (1 - abs((h / 60) % 2 - 1))
-        m = l - c / 2
-        r, g, b = [(c, x, 0), (x, c, 0), (0, c, x), (0, x, c),
-                   (x, 0, c), (c, 0, x)][int(h // 60) % 6]
-        return "#%02x%02x%02x" % (round((r + m) * 255), round((g + m) * 255), round((b + m) * 255))
-    h = (idx * 137.508 + 40) % 360
-    return hsl(h, 0.60, 0.47), hsl(h, 0.62, 0.60)
+    curated Baltic-folk palette; beyond it the palette RECYCLES a shade deeper each lap, so
+    colours stay on the ethnic set (never drift into neon/magenta) for any topic count and a
+    topic keeps its colour across builds."""
+    n = len(_FOLK_LIGHT)
+    li, di = _FOLK_LIGHT[idx % n], _FOLK_DARK[idx % n]
+    lap = idx // n
+    if lap == 0:
+        return li, di
+
+    def scale(hx, k):
+        r, g, b = int(hx[1:3], 16), int(hx[3:5], 16), int(hx[5:7], 16)
+        return "#%02x%02x%02x" % (min(255, round(r * k)), min(255, round(g * k)),
+                                  min(255, round(b * k)))
+    return scale(li, 0.80 ** lap), scale(di, 1.0 + 0.14 * lap)   # darken on linen, lift on charcoal
 
 
 def _track_topics(clusters, centroids, scope, model, run_date):
