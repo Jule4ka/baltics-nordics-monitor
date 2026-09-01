@@ -216,7 +216,7 @@ def _cluster(emb):
     # the cliff; as the corpus grows, n//30 eventually lands back on it and we get 2
     # topics "again". "leaf" selection instead keeps the leaf sub-clusters, decomposing
     # that mass into ~10-15 readable sub-topics and degrading smoothly with mcs.
-    mcs = max(6, n // 30)                              # ~10-15 topics on a ~150-260 doc corpus
+    mcs = max(6, n // 26)                              # ~10 well-separated topics (fewest "Other"); n//30→15, n//45→21
     labels = HDBSCAN(min_cluster_size=mcs, min_samples=1, metric="euclidean",
                      cluster_selection_method="leaf").fit_predict(red)
     return labels

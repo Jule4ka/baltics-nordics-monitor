@@ -337,3 +337,102 @@ a:focus-visible,.leg:focus-visible{outline:2px solid var(--accent);outline-offse
 @media (max-width:560px){#map{height:440px;}#legend{position:static;max-width:none;margin:10px;}
   .country-wrap{gap:16px;}.country-map{width:min(240px,66vw);}
   .tl-chart{height:120px;}.tl-axis .tl-ax-mid{display:none;}}
+
+/* ── relationship network (web + matrix) ─────────────────────────────────────
+   Reuses the folk palette tokens: people=accent, orgs=indigo, places=green; the
+   country strip is a gold ramp so it never collides with the node colours. */
+.net-toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;
+  border-bottom:2px solid var(--border2);}
+.viewtog{display:inline-flex;border:1.5px solid var(--border2);border-radius:8px;overflow:hidden;}
+.viewtog button{font:inherit;font-size:12.5px;font-weight:700;padding:6px 14px;border:none;cursor:pointer;
+  background:transparent;color:var(--muted);}
+.viewtog button.on{background:var(--gold);color:#3a140e;}
+:root[data-theme=dark] .viewtog button.on{color:#1a140a;}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .viewtog button.on{color:#1a140a;}}
+.net-legend{display:flex;gap:4px;}
+.nleg{display:flex;align-items:center;gap:7px;padding:5px 11px;border:1.5px solid var(--border2);
+  border-radius:20px;background:transparent;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;
+  color:var(--ink);user-select:none;}
+.nleg .sw{width:11px;height:11px;border-radius:50%;flex:0 0 auto;}
+.nleg[data-g=people] .sw{background:var(--accent)} .nleg[data-g=orgs] .sw{background:var(--indigo)}
+.nleg[data-g=places] .sw{background:var(--green)}
+.nleg.off{opacity:.4;}
+.net-slider{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);}
+.net-slider input[type=range]{accent-color:var(--gold);width:104px;}
+.net-slider b{color:var(--ink);min-width:14px;text-align:right;font-variant-numeric:tabular-nums;}
+.net-slider select{font:inherit;font-size:12.5px;padding:5px 8px;border:1.5px solid var(--border2);
+  border-radius:6px;background:var(--panel);color:var(--ink);}
+.net-btn{font:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:7px;cursor:pointer;
+  background:transparent;color:var(--ink);border:1.5px solid var(--border2);}
+.net-btn:hover{border-color:var(--gold);}
+.viewtog button:focus-visible,.nleg:focus-visible,.net-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+/* view-driven visibility */
+#netPanel[data-view=web] #netMx,#netPanel[data-view=web] .net-mxwrap,
+#netPanel[data-view=web] .net-mtx,#netPanel[data-view=matrix] #netWeb,
+#netPanel[data-view=matrix] .net-web{display:none;}
+
+.net-stage{position:relative;height:620px;overflow:hidden;background:var(--panel);}
+#netWeb{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;}
+#netWeb.drag{cursor:grabbing;}
+.net-mxwrap{position:absolute;inset:0;overflow:auto;padding:8px 8px 32px;}
+#netMx{display:block;}
+.net-hint{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--faint);pointer-events:none;
+  background:color-mix(in srgb,var(--panel) 82%,transparent);backdrop-filter:blur(4px);
+  padding:5px 10px;border-radius:6px;border:1px solid var(--border2);}
+.net-tip{position:absolute;pointer-events:none;z-index:9;opacity:0;transition:opacity .08s;
+  background:var(--ink);color:var(--bg);font-size:12px;padding:6px 9px;border-radius:6px;
+  box-shadow:0 6px 18px rgba(0,0,0,.3);white-space:nowrap;max-width:240px;}
+.net-tip .tn{font-weight:700;} .net-tip .tm{opacity:.75;font-size:11px;}
+
+/* dossier */
+.net-detail{position:absolute;top:12px;right:12px;width:288px;max-height:calc(100% - 24px);overflow:auto;
+  background:var(--panel);border:2.5px solid var(--gold);border-radius:10px;box-shadow:var(--shadow);
+  transform:translateX(118%);transition:transform .22s cubic-bezier(.4,.9,.3,1);z-index:8;}
+.net-detail.open{transform:none;}
+.nd-head{padding:14px 15px 12px;border-bottom:2px solid var(--border2);position:relative;}
+.nd-kind{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;}
+.nd-name{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-weight:700;
+  font-size:20px;line-height:1.12;margin:4px 0 0;}
+.nd-close{position:absolute;top:10px;right:10px;width:24px;height:24px;border:none;border-radius:6px;
+  background:var(--border2);color:var(--muted);cursor:pointer;font-size:14px;line-height:1;}
+.nd-close:hover{color:var(--accent);}
+.nd-metrics{display:flex;border-bottom:2px solid var(--border2);}
+.nd-metric{flex:1;padding:11px 13px;border-right:1px solid var(--border2);}
+.nd-metric:last-child{border-right:none;}
+.nd-metric .mn{font-size:21px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.nd-metric .ml{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-top:2px;}
+.tonepill{display:inline-block;padding:1px 8px;border-radius:20px;color:#fff;font-weight:800;font-size:14px;}
+.nd-sec{padding:12px 15px;border-bottom:2px solid var(--border2);}
+.nd-sec:last-child{border-bottom:none;}
+.nd-lab{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;
+  display:flex;justify-content:space-between;}
+.nd-lab span{color:var(--faint);font-weight:600;letter-spacing:.03em;}
+.tl-mini{display:flex;align-items:flex-end;gap:3px;height:42px;}
+.tl-mini .bar{flex:1;background:var(--gold);border-radius:2px 2px 0 0;min-height:2px;opacity:.9;}
+.tl-mini .bar:hover{opacity:1;outline:1px solid var(--ink);}
+.tl-mini-x{display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:5px;}
+.geobar{display:flex;height:15px;border-radius:4px;overflow:hidden;border:1px solid var(--border2);}
+.geobar i{display:block;box-shadow:inset -1px 0 0 color-mix(in srgb,var(--ink) 22%,transparent);}
+.geobar i:last-child{box-shadow:none;}
+.geobar .ee{background:var(--indigo);}
+.geobar .lv{background:var(--accent);}
+.geobar .lt{background:var(--green);}
+.geokeys{display:flex;gap:15px;margin-top:8px;font-size:11.5px;color:var(--muted);}
+.geokeys span{display:flex;align-items:center;} .geokeys b{color:var(--ink);font-weight:700;margin-left:4px;}
+.geokeys i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:6px;}
+.geokeys .ee{background:var(--indigo);}
+.geokeys .lv{background:var(--accent);} .geokeys .lt{background:var(--green);}
+.nrow{display:flex;align-items:center;gap:9px;padding:5px 0;cursor:pointer;border-radius:5px;}
+.nrow:hover{background:color-mix(in srgb,var(--gold) 12%,transparent);}
+.nrow .ndot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+.nrow .nm{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nrow .nv{font-size:12px;color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums;}
+.nbar{height:3px;border-radius:2px;background:var(--gold);margin-top:2px;}
+.nd-arts ul{list-style:none;margin:0;padding:0;max-height:230px;overflow:auto;}
+.nd-arts li{border-top:1px solid var(--border2);} .nd-arts li:first-child{border-top:none;}
+.nd-arts a{display:block;padding:7px 2px;color:var(--ink);text-decoration:none;font-size:12.5px;line-height:1.3;}
+.nd-arts a:hover{color:var(--accent);}
+.nd-arts .src{display:block;margin-top:2px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);}
+@media (prefers-reduced-motion:reduce){.net-detail{transition:none;}}
+@media (max-width:560px){.net-stage{height:520px;}.net-detail{width:calc(100% - 20px);right:10px;left:10px;}}
