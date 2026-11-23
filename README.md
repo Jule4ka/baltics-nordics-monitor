@@ -267,10 +267,11 @@ Top to bottom:
    A semantic search box (transformers.js, in-browser) that ranks articles by meaning
    rather than keywords.
 6. **Discovered topics — clusters found by meaning.**
-   One panel (*"Topic map & anomalies"*): the embeddings map (BERTopic/HDBSCAN topics,
-   coloured and labelled), a topic-river streamgraph, an escalation-tone heatmap, the
-   clickable topic list, and an anomalies list. Built from the text, *independent* of the
-   keyword buckets.
+   A single panel titled *"Topic map & anomalies"* (one heading, no repeated "topics"
+   labels): the embeddings map (BERTopic/HDBSCAN topics, coloured and labelled), a
+   topic-river streamgraph, an escalation-tone heatmap, the clickable topic list beneath
+   the map, and an anomalies list. Built from the text, *independent* of the keyword
+   buckets.
 
 The design is a deliberate **Baltic woven-textile** look — a madder-red + gold + cream
 palette (deep-wine in dark mode), a patterned masthead, gold-framed panels, folk-sign

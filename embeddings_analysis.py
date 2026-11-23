@@ -1144,7 +1144,6 @@ _EMB_SECTION = """
         <div class="tone-arts" id="toneArts"></div>
       </div>
       <div class="emb-anom">
-        <h4 id="embTopH">Discovered topics</h4>
         <ul id="embTop"></ul>
         <h4 id="embAnomH">Anomalies — the most isolated stories</h4>
         <ul id="embAnom"></ul>
@@ -1414,7 +1413,6 @@ _EMB_SCRIPT = r"""
         el.classList.toggle('off'); draw();};              // map legend filters the map only
     });
     // discovered-topics list: click a topic to expand the articles inside it
-    document.getElementById('embTopH').textContent=`Discovered topics — ${CL.filter(c=>c.label!=='Other').length} clusters (click to list articles)`;
     const artsFor = id => v.points.filter(p=>p.c===id)
       .sort((a,b)=> (a.d<b.d?1:a.d>b.d?-1:0))          // most recent first
       .map(p=>`<li><a href="${p.u}" target="_blank" rel="noopener">${p.h}`
