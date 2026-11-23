@@ -157,6 +157,8 @@ cython_debug/
 # emb_cache IS committed now: it holds the semantic vectors keyed by URL, so the
 # daily CI only embeds NEW articles instead of recomputing everything each run.
 # (embeddings are part of the main page — there's no separate -embed file anymore.)
+# analysis/body_cache.json IS committed too: scraped article bodies keyed by URL, so the
+# build downloads each body once and later runs only fetch newly-matched articles.
 
 # Standalone-only artifact from `python embeddings_analysis.py` (not the main page)
 analysis/embeddings-prototype.html

@@ -16,6 +16,8 @@ multi-label), not clustering. Semantic topic DISCOVERY (embeddings -> UMAP ->
 HDBSCAN) lives in embeddings_analysis.py.
 """
 import re
+import os
+import json
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 
@@ -27,8 +29,14 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from config import (
     FILES, SRC_CODE, SRC_LABEL, SRC_HOME, KEYWORDS, HEADERS, BOILERPLATE,
     EXTRA_STOP, FREQ_STOP, canon, THEMES, THEME_OTHER, THEME_PATS, THEME_RANK,
-    COLORS_LIGHT, COLORS_DARK, BALTIC_MAP,
+    COLORS_LIGHT, COLORS_DARK, BALTIC_MAP, OUT_DIR,
 )
+
+# Persisted article-body cache, keyed by URL (committed, like emb_cache). Bodies are
+# downloaded ONCE; later runs only fetch URLs not already cached. Failed fetches are
+# NOT stored, so they retry next run; the cache is pruned to the current matched set
+# each run so the file stays bounded.
+BODY_CACHE = f"{OUT_DIR}/body_cache.json"
 
 
 try:
@@ -199,12 +207,48 @@ def fetch_body(url):
         return ""
 
 
+def _load_body_cache():
+    try:
+        with open(BODY_CACHE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_body_cache(cache):
+    try:
+        os.makedirs(OUT_DIR, exist_ok=True)
+        with open(BODY_CACHE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[fetch] could not write body cache ({type(e).__name__})")
+
+
 def fetch_all(urls):
-    print(f"[fetch] downloading {len(urls)} article bodies ...")
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        bodies = list(ex.map(fetch_body, urls))
+    """Return each URL's article body, downloading ONLY the ones not already cached.
+
+    Bodies are persisted by URL in BODY_CACHE, so the first run downloads everything and
+    later runs fetch just the new articles ('download once, then update'). Empty results
+    (fetch failures) are not cached, so they retry next time; the saved cache is pruned to
+    the current URL set so it never grows without bound."""
+    cache = _load_body_cache()
+    missing = [u for u in urls if not cache.get(u)]        # empty/absent -> (re)fetch
+    have = len(urls) - len(missing)
+    print(f"[fetch] {have}/{len(urls)} bodies from cache; downloading {len(missing)} new ...")
+    if missing:
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            fetched = list(ex.map(fetch_body, missing))
+        got = 0
+        for u, b in zip(missing, fetched):
+            if b:                                          # don't cache failures -> they retry
+                cache[u] = b
+                got += 1
+        print(f"[fetch] got body text for {got}/{len(missing)} new articles")
+    bodies = [cache.get(u, "") for u in urls]
+    pruned = {u: cache[u] for u in urls if u in cache}     # keep only the current matched set
+    _save_body_cache(pruned)
     ok = sum(1 for b in bodies if b)
-    print(f"[fetch] got body text for {ok}/{len(urls)} articles")
+    print(f"[fetch] body text available for {ok}/{len(urls)} articles ({len(pruned)} cached)")
     return bodies
 
 

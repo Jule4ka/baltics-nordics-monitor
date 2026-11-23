@@ -36,6 +36,15 @@ jobs:
       # Python) can't sink the daily publish — render.py then builds a TF-IDF-only page.
       continue-on-error: true
       run: pip install fastembed umap-learn
+    - name: Install BERTopic (optional — clustering falls back to built-in HDBSCAN if this fails)
+      # BERTopic becomes the topic-clustering engine in embeddings_analysis._cluster when
+      # importable; otherwise the identical hand-rolled UMAP->HDBSCAN runs instead. It pulls a
+      # heavier stack (hdbscan + sentence-transformers/torch) than the ONNX fastembed path — we
+      # still embed via fastembed and pass precomputed vectors, so torch isn't used at runtime,
+      # but it IS downloaded here. continue-on-error so a wheel gap can't sink the publish; set
+      # BALTICS_NO_BERTOPIC=1 on the build step (or drop this step) to force the light path.
+      continue-on-error: true
+      run: pip install bertopic
     - name: Install NER extra (optional — page omits the entities section if this fails)
       # spaCy + small English model power the "The players" people/orgs/places section.
       # continue-on-error + graceful fallback in ner.py mean a wheel/model gap just drops

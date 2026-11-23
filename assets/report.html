@@ -126,12 +126,14 @@
   <div class="weave footer-weave" aria-hidden="true"></div>
   <footer class="mono">
     Sources: ERR (Estonia), LRT (Lithuania), LSM (Latvia), English editions.<br>
-    Method: headlines filtered to defence/geopolitics themes, full article bodies fetched,
-    TF-IDF vectorised, reduced with TruncatedSVD (LSA) and laid out with t-SNE so nearby dots
-    share wording. Themes are hand-authored keyword buckets, not clusters: an article is tagged with
-    every bucket its words hit (headline weighted) and coloured by the strongest — so it can appear
-    under more than one theme; hover a dot for its theme name(s). The most frequent terms are tallied across the article titles:
-    with common English stopwords and the Baltic countries' own names and capitals removed, so only
-    the distinctive words surface; word variants (russia/russian, drone/drones) count as one.
+    Method: headlines filtered to defence/geopolitics themes, full article bodies fetched.
+    Themes are hand-authored keyword buckets, not clusters: an article is tagged with every bucket
+    its words hit (headline weighted) and coloured by the strongest — so it can appear under more than
+    one theme. A separate semantic layer embeds each story with BGE sentence-embeddings and discovers
+    topics by clustering them (BERTopic / HDBSCAN); the search box matches your query by meaning,
+    embedding it in your browser with transformers.js. Named entities come from spaCy. The most
+    frequent terms are tallied across the article titles: with common English stopwords and the Baltic
+    countries' own names and capitals removed, so only the distinctive words surface; word variants
+    (russia/russian, drone/drones) count as one.
   </footer>
 </div>

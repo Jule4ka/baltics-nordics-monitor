@@ -123,77 +123,55 @@ def _neighbors(emb, k=5):
     return idx, iso
 
 
-# ── cross-country "same story" matching ─────────────────────────────────────
-# The three feeds are independent newsrooms; when an event matters, EE/LV/LT often
-# cover it separately. We find those shared events by embedding proximity: articles
-# linked ONLY across a country border (cosine >= XCOUNTRY_MIN) are unioned into a
-# "story". A story spanning >=2 countries lets us set the three framings side by
-# side and read the tone spread (who covers it hotter). 0.85 is the elbow from the
-# calibration sweep — tight enough that a story is one event, loose enough to catch
-# translated/independent retellings; below it, whole topics chain into one blob.
-XCOUNTRY_MIN = 0.85
-XCOUNTRY_MAX_STORIES = 14
+# ── hybrid defence filter: regex ∪ semantic (embedding) net ──────────────────
+def semantic_defence_scores(df_all, model=DEFAULT_MODEL):
+    """Cosine of every article HEADLINE to the defence-anchor centroid.
+
+    Headlines are embedded + cached by URL (scope 'headline'), so this is incremental —
+    the first run embeds the whole corpus, later runs only the new headlines. Returns a
+    numpy array of per-article cosine, aligned to df_all rows."""
+    urls = df_all["url"].tolist()
+    heads = df_all["headline"].fillna("").astype(str).tolist()
+    emb = get_embeddings(urls, heads, "headline", model)      # (n, dim), unit-norm, cached
+    enc, _ = _encoder(model)
+    av = _normalize(enc(list(config.DEFENCE_ANCHORS)))        # embed the anchor phrases
+    anchor = av.mean(axis=0)
+    anchor = anchor / (np.linalg.norm(anchor) or 1.0)         # unit anchor centroid
+    return emb @ anchor                                        # cosine per article
 
 
-def _cross_country_stories(emb, df, tone, thresh=XCOUNTRY_MIN, cap=XCOUNTRY_MAX_STORIES):
-    """Group articles that report the SAME event across different source countries.
+def hybrid_filter(df_all, model=DEFAULT_MODEL, pctl=None, floor=None, show=12):
+    """Keep articles that hit the KEYWORDS regex OR are semantically close to the defence
+    anchors (config.DEFENCE_ANCHORS). The regex set is always kept (union, never dropped);
+    the semantic net only ADDS. Returns the matched DataFrame.
 
-    Returns a list of stories (most countries first, then most recent), each with the
-    single most-central article per country + that country's article count, so the
-    front-end can lay the newsrooms side by side with their escalation tone.
-    """
-    n = len(emb)
-    if n < 2:
-        return []
-    cc = [config.SRC_CODE.get(s, "?") for s in df["source"]]
-    heads = df["headline"].fillna("").tolist()
-    urls = df["url"].tolist()
-    dates = [str(d)[:10] for d in df["scrape_date"]]
-    labels = [config.SRC_LABEL.get(s, s) for s in df["source"]]
-
-    S = emb @ emb.T
-    np.fill_diagonal(S, -1.0)
-    parent = list(range(n))
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    ii, jj = np.where(np.triu(S >= thresh, 1))         # candidate edges (upper triangle)
-    for i, j in zip(ii.tolist(), jj.tolist()):
-        if cc[i] != cc[j]:                             # ONLY cross-border edges seed a story
-            a, b = find(i), find(j)
-            if a != b:
-                parent[a] = b
-
-    comp = {}
-    for i in range(n):
-        comp.setdefault(find(i), []).append(i)
-
-    stories = []
-    for members in comp.values():
-        ctys = {cc[i] for i in members if cc[i] in ("EE", "LV", "LT")}
-        if len(ctys) < 2 or len(members) < 2:
-            continue
-        by = {}
-        for c in ctys:
-            cand = [i for i in members if cc[i] == c]
-            best = max(cand, key=lambda i: sum(float(S[i, k]) for k in members if k != i))
-            by[c] = {"h": heads[best], "u": urls[best], "d": dates[best],
-                     "s": labels[best], "to": round(float(tone[best]), 3), "n": len(cand)}
-        tones = [v["to"] for v in by.values()]
-        stories.append({
-            "span": len(ctys), "size": len(members),
-            "date": max(dates[i] for i in members),
-            "spread": round(max(tones) - min(tones), 3),
-            "by": by,
-        })
-    stories.sort(key=lambda s: (s["span"], s["date"], s["size"]), reverse=True)
-    print(f"[xcountry] {len(stories)} cross-country stories "
-          f"({sum(1 for s in stories if s['span'] == 3)} span all three)")
-    return stories[:cap]
+    The semantic bar auto-calibrates: a non-regex article passes if its anchor cosine
+    clears the Pth percentile (config.SEMANTIC_PCTL) of the regex-matched set's own anchor
+    cosine, plus an absolute floor. Raises on embedding failure so the caller can fall back
+    to the regex-only path."""
+    pctl = config.SEMANTIC_PCTL if pctl is None else pctl
+    floor = config.SEMANTIC_FLOOR if floor is None else floor
+    regex_mask = df_all["headline"].str.contains(
+        config.KEYWORDS, case=False, na=False, regex=True).to_numpy()
+    sims = semantic_defence_scores(df_all, model)             # may raise -> caller falls back
+    if regex_mask.any():
+        bar = max(float(np.percentile(sims[regex_mask], pctl)), float(floor))
+    else:
+        bar = 1.0
+    sem_mask = sims >= bar
+    final = regex_mask | sem_mask
+    added = sem_mask & ~regex_mask                           # semantic-only additions
+    print(f"[filter] hybrid: regex {int(regex_mask.sum())} + semantic net "
+          f"(+{int(added.sum())} semantic-only, bar={bar:.3f} @p{pctl}) "
+          f"= {int(final.sum())}/{len(df_all)} matched")
+    if show and added.any():                                 # eyeball the strongest additions
+        added_idx = np.where(added)[0]
+        order = added_idx[np.argsort(-sims[added_idx])][:show]
+        heads = df_all["headline"].fillna("").astype(str).tolist()
+        print("[filter] top semantic-only additions (cosine):")
+        for i in order:
+            print(f"         {sims[int(i)]:.3f}  {heads[int(i)][:88]}")
+    return df_all[final].reset_index(drop=True)
 
 
 # ── escalation tone (embedding-anchored, no extra model) ─────────────────────
@@ -269,8 +247,67 @@ def _heatmap(pts, clusters):
     return {"weeks": weeks, "rows": [c["id"] for c in real], "heat": heat, "line": line}
 
 
-def _cluster(emb):
-    """HDBSCAN over a UMAP-reduced embedding -> integer label per row (-1 = noise).
+# Prefer the BERTopic library for clustering when it's installed; otherwise fall back
+# to the hand-rolled UMAP->HDBSCAN below (identical recipe, so the page never changes
+# shape just because BERTopic is missing in CI). Set BALTICS_NO_BERTOPIC=1 to force the
+# fallback even when the library is present (useful for a fast/light local build).
+USE_BERTOPIC = os.environ.get("BALTICS_NO_BERTOPIC", "") not in ("1", "true", "True")
+
+
+def _umap_hdbscan_models(n, mcs):
+    """The UMAP + HDBSCAN sub-models for the BERTopic path, matching the fallback's recipe
+    (cosine UMAP to a handful of dims + a 'leaf' HDBSCAN). Prefers the `hdbscan` library
+    that BERTopic ships with (so prediction_data works); falls back to sklearn's HDBSCAN."""
+    from umap import UMAP
+    n_neighbors = max(2, min(15, n - 1))
+    nc = max(2, min(5, n - 2))
+    umap_model = UMAP(n_neighbors=n_neighbors, n_components=nc, min_dist=0.0,
+                      metric="cosine", random_state=42)
+    try:
+        from hdbscan import HDBSCAN                 # the contrib lib BERTopic depends on
+        hdbscan_model = HDBSCAN(min_cluster_size=mcs, min_samples=1, metric="euclidean",
+                                cluster_selection_method="leaf", prediction_data=True)
+    except Exception:
+        from sklearn.cluster import HDBSCAN         # sklearn's has no prediction_data
+        hdbscan_model = HDBSCAN(min_cluster_size=mcs, min_samples=1, metric="euclidean",
+                                cluster_selection_method="leaf")
+    return umap_model, hdbscan_model
+
+
+def _cluster_bertopic(emb, docs, n, mcs):
+    """Cluster with the BERTopic library, reusing our precomputed BGE embeddings and the
+    same cosine-UMAP -> leaf-HDBSCAN recipe. Returns integer labels (-1 = noise), or None
+    if BERTopic (or a dependency) isn't importable so the caller can fall back.
+
+    We only take BERTopic's topic ASSIGNMENTS here; the downstream noise-folding, KeyBERT
+    semantic labels and cross-build topic tracking remain our own (they're tuned for this
+    narrow defence feed and are better than BERTopic's default c-TF-IDF labels)."""
+    try:
+        from bertopic import BERTopic
+        from sklearn.feature_extraction.text import CountVectorizer
+    except Exception as e:
+        print(f"[cluster] BERTopic unavailable ({type(e).__name__}); using built-in HDBSCAN")
+        return None
+    try:
+        umap_model, hdbscan_model = _umap_hdbscan_models(n, mcs)
+        # English stopwords for BERTopic's own c-TF-IDF (unused for our labels, but keeps
+        # its internal topic representation sane and the fit fast).
+        vec = CountVectorizer(stop_words="english")
+        tm = BERTopic(umap_model=umap_model, hdbscan_model=hdbscan_model,
+                      vectorizer_model=vec, calculate_probabilities=False, verbose=False)
+        topics, _ = tm.fit_transform(list(docs), embeddings=np.asarray(emb, dtype=np.float32))
+        labels = np.asarray(topics, dtype=int)
+        n_topics = len([t for t in set(labels.tolist()) if t != -1])
+        print(f"[cluster] BERTopic found {n_topics} topics ({int((labels==-1).sum())} noise)")
+        return labels
+    except Exception as e:
+        print(f"[cluster] BERTopic fit failed ({type(e).__name__}: {e}); using built-in HDBSCAN")
+        return None
+
+
+def _cluster(emb, docs=None):
+    """Topic labels per row (-1 = noise). Uses BERTopic when installed (and not disabled
+    via BALTICS_NO_BERTOPIC), else a hand-rolled UMAP->HDBSCAN with the same recipe.
 
     UMAP-then-HDBSCAN is the BERTopic recipe: cosine UMAP to a handful of dims
     (Euclidean is meaningful there) so density clustering has something to bite.
@@ -280,7 +317,6 @@ def _cluster(emb):
     n = len(emb)
     if n < 12:
         return np.zeros(n, dtype=int)                  # too few docs to cluster
-    red = _umap(emb, n_components=min(5, n - 2), min_dist=0.0)
     # Defence/geopolitics feeds are topically narrow, so most stories pile into one
     # dense mass. HDBSCAN's default "eom" (excess-of-mass) selection prefers that big
     # parent cluster, and around min_cluster_size ~= n/30 it collapses the whole feed
@@ -290,6 +326,11 @@ def _cluster(emb):
     # topics "again". "leaf" selection instead keeps the leaf sub-clusters, decomposing
     # that mass into ~10-15 readable sub-topics and degrading smoothly with mcs.
     mcs = max(6, n // 26)                              # ~10 well-separated topics (fewest "Other"); n//30→15, n//45→21
+    if USE_BERTOPIC and docs is not None:
+        labels = _cluster_bertopic(emb, docs, n, mcs)
+        if labels is not None:
+            return labels
+    red = _umap(emb, n_components=min(5, n - 2), min_dist=0.0)
     labels = HDBSCAN(min_cluster_size=mcs, min_samples=1, metric="euclidean",
                      cluster_selection_method="leaf").fit_predict(red)
     return labels
@@ -812,7 +853,7 @@ def build_view(df, scope, model):
     emb = get_embeddings(urls, texts, scope, model)
     xy = _umap(emb, n_components=2, min_dist=0.1)      # 2-D layout for the map
     _nn, iso = _neighbors(emb, 5)
-    raw = _cluster(emb)                                # HDBSCAN labels (-1 = noise)
+    raw = _cluster(emb, texts)                         # BERTopic/HDBSCAN labels (-1 = noise)
     raw = _reduce_noise(emb, raw)                      # fold border points out of noise
     # Up to 4 candidate terms per cluster, ranked KeyBERT-style — each phrase embedded with
     # the map's BGE model and scored by cosine to the cluster centroid (semantic centrality,
@@ -916,8 +957,7 @@ def build_view(df, scope, model):
             "to": round(float(tone[i]), 3),
         })
     return {"scope": scope, "model": model, "points": pts, "clusters": clusters,
-            "tone": _heatmap(pts, clusters),
-            "stories": _cross_country_stories(emb, df, tone)}
+            "tone": _heatmap(pts, clusters)}
 
 
 # ── HTML / CSS / JS fragments (spliced into the main report) ─────────────────
@@ -1056,42 +1096,14 @@ EMB_CSS = """
 .tone-arts .ta-list .src{display:block;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--faint);margin-top:2px;}
 
-/* same story, three newsrooms */
-.emb-xc{padding:6px 20px 18px;}
-.emb-xc h4{margin:0 0 4px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);}
-.xc-list{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
-.xc-story{border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel);}
-.xc-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 12px;
-  background:color-mix(in srgb,var(--gold) 10%,var(--panel));border-bottom:1px solid var(--border2);
-  font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
-.xc-head .xc-span{font-weight:800;color:var(--ink);letter-spacing:.05em;text-transform:uppercase;font-size:10px;}
-.xc-head .xc-spread{margin-left:auto;display:inline-flex;align-items:center;gap:6px;}
-.xc-head .xc-spread b{color:var(--ink);}
-.xc-cols{display:grid;grid-template-columns:repeat(var(--cols,3),1fr);}
-.xc-col{padding:11px 13px;border-left:1px solid var(--border2);min-width:0;}
-.xc-col:first-child{border-left:0;}
-.xc-cc{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.05em;
-  text-transform:uppercase;}
-.xc-cc .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
-.xc-cc.ee .dot{background:var(--ee);}.xc-cc.lv .dot{background:var(--lv);}.xc-cc.lt .dot{background:var(--lt);}
-.xc-cc.ee{color:var(--ee);}.xc-cc.lv{color:var(--lv);}.xc-cc.lt{color:var(--lt);}
-.xc-a{display:block;margin-top:7px;color:var(--ink);text-decoration:none;font-size:13px;line-height:1.32;font-weight:600;}
-.xc-a:hover{color:var(--accent);}
-.xc-meta{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:10px;color:var(--faint);
-  letter-spacing:.04em;text-transform:uppercase;}
-.xc-tone{font-weight:700;padding:1px 6px;border-radius:3px;color:#fff;font-variant-numeric:tabular-nums;
-  text-transform:none;letter-spacing:0;}
-.xc-more{font-size:10px;color:var(--faint);}
-@media (max-width:640px){.xc-cols{grid-template-columns:1fr;}
-  .xc-col{border-left:0;border-top:1px solid var(--border2);}.xc-col:first-child{border-top:0;}}
 """
 
 _EMB_SECTION = """
     <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.2"/><circle cx="14" cy="6" r="2.2"/><circle cx="10" cy="14" r="2.2"/><path d="M7.8 8.2 12 12M12.2 7.2 11 12"/></svg> Discovered topics — clusters found by meaning</p>
     <section class="panel">
       <div class="panel-h">
-        <h2>Semantic topics &amp; anomalies</h2>
-        <span class="hint mono">topics discovered from the text</span>
+        <h2>Topic map &amp; anomalies</h2>
+        <span class="hint mono">the clusters above, laid out and listed</span>
       </div>
       <div style="padding:14px 20px 0">
         <p class="emb-note">Built from scratch from the article <b>embeddings</b> (BGE), <b>not</b> the keyword buckets. HDBSCAN groups the stories into <b>data-driven clusters</b>, each named by the key phrase whose meaning sits closest to the cluster (embedding similarity × distinctiveness). Topics are <b>tracked across days</b>, so a topic keeps the same name and colour build to build. Embeds each story's <b>headline + body</b>; off-topic stories fall out as <i>Other</i>.</p>
@@ -1130,11 +1142,6 @@ _EMB_SECTION = """
         <div class="tone-heat" id="toneHeat"></div>
         <div class="emb-tip" id="toneTip"></div>
         <div class="tone-arts" id="toneArts"></div>
-      </div>
-      <div class="emb-xc">
-        <h4>Same story, three newsrooms — how EE / LV / LT cover one event</h4>
-        <p class="tone-sub">The three feeds are independent newsrooms. Articles are matched <b>across borders by meaning</b> (embedding similarity, not shared words), so each row is <b>one event</b> retold by two or three countries. Columns show each country's lead article and its <b>escalation tone</b> — see who frames it hotter. <b>Tone spread</b> = gap between the most- and least-escalatory country.</p>
-        <div class="xc-list" id="xcList"></div>
       </div>
       <div class="emb-anom">
         <h4 id="embTopH">Discovered topics</h4>
@@ -1436,33 +1443,7 @@ _EMB_SCRIPT = r"""
     document.getElementById('embAnom').innerHTML = anom.length?li(anom):'<li>none</li>';
     renderChips(v); renderStream(v); setupStream();
     renderTone(v);
-    renderXC(v);
     layout(); draw();
-  }
-  function renderXC(v){
-    const box=document.getElementById('xcList'); if(!box) return;
-    const st=v.stories||[];
-    if(!st.length){ box.innerHTML='<p class="tone-sub" style="margin:0">No cross-country matches in this window.</p>'; return; }
-    const ORDER=['EE','LV','LT'], NM={EE:'Estonia',LV:'Latvia',LT:'Lithuania'};
-    const toneCol=t=>{const a=Math.min(1,Math.abs(t||0)*2.2),pos=(t||0)>=0,
-      tg=pos?[208,59,59]:[42,120,214],m=x=>Math.round(150+(x-150)*a);
-      return `rgb(${m(tg[0])},${m(tg[1])},${m(tg[2])})`;};
-    const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    box.innerHTML=st.map(s=>{
-      const cts=ORDER.filter(c=>s.by[c]);
-      const cols=cts.map(c=>{const a=s.by[c];
-        const more=a.n>1?`<span class="xc-more">+${a.n-1} more</span>`:'';
-        return `<div class="xc-col">`
-          +`<span class="xc-cc ${c.toLowerCase()}"><span class="dot"></span>${NM[c]}</span>`
-          +`<a class="xc-a" href="${a.u}" target="_blank" rel="noopener">${esc(a.h)}</a>`
-          +`<div class="xc-meta"><span class="xc-tone" style="background:${toneCol(a.to)}">${a.to>0?'+':''}${a.to.toFixed(2)}</span>${esc(a.s)} · ${a.d} ${more}</div>`
-          +`</div>`;}).join('');
-      const spreadTxt = s.span>1 ? `tone spread <b>${s.spread.toFixed(2)}</b>` : '';
-      return `<div class="xc-story">`
-        +`<div class="xc-head"><span class="xc-span">${s.span} countries</span> · ${s.size} articles · latest ${s.date}`
-        +`<span class="xc-spread">${spreadTxt}</span></div>`
-        +`<div class="xc-cols" style="--cols:${cts.length}">${cols}</div></div>`;
-    }).join('');
   }
   function layout(){
     const dpr=devicePixelRatio||1, w=wrap.clientWidth, h=cvs.clientHeight, pad=30;
@@ -1508,6 +1489,137 @@ _EMB_SCRIPT = r"""
 """
 
 
+# ── in-browser semantic search (transformers.js) ─────────────────────────────
+# A SMALL embedding model whose transformers.js twin runs client-side, so the static
+# page can do true semantic search with no server. We embed the corpus here with
+# fastembed and ship int8-quantised vectors; the browser embeds only the live query.
+SEARCH_MODEL_PY = "BAAI/bge-small-en-v1.5"       # fastembed id used to embed the corpus
+SEARCH_MODEL_JS = "Xenova/bge-small-en-v1.5"     # transformers.js twin, loaded in-browser
+# BGE retrieval convention: prefix the QUERY (not the passages) with this instruction.
+SEARCH_QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
+
+
+def _build_search_index(df, model=SEARCH_MODEL_PY):
+    """Embed the corpus with the small model and pack it for the browser. Vectors are
+    unit-normalised, int8-quantised (×127) and base64'd to keep the inline payload small
+    (~0.5 KB/article). Returns a JSON-able dict, or None if the embed stack is missing."""
+    import base64
+    urls = df["url"].tolist()
+    texts = (df["headline"].fillna("") + ". " + df["body"].fillna("")).tolist() \
+        if "body" in df.columns else df["headline"].fillna("").tolist()
+    emb = get_embeddings(urls, texts, "search", model)   # (n, dim), unit-norm, cached by URL
+    q = np.clip(np.round(emb * 127.0), -127, 127).astype(np.int8)
+    b64 = base64.b64encode(q.tobytes()).decode("ascii")
+    meta = [{"h": r.headline, "u": r.url, "s": config.SRC_LABEL[r.source],
+             "d": str(r.scrape_date)} for r in df.itertuples()]
+    print(f"[search] packed {emb.shape[0]} vectors × {emb.shape[1]}d int8 ({len(b64)//1024} KB b64)")
+    return {"modelJs": SEARCH_MODEL_JS, "instruction": SEARCH_QUERY_INSTRUCTION,
+            "dim": int(emb.shape[1]), "n": int(emb.shape[0]), "scale": 127.0,
+            "b64": b64, "meta": meta}
+
+
+SEARCH_CSS = """
+/* in-browser semantic search (transformers.js) */
+.sr-wrap{padding:14px 20px 18px;}
+.sr-input{width:100%;box-sizing:border-box;padding:12px 15px;font-size:15px;border:2px solid var(--gold);
+  border-radius:8px;background:var(--panel);color:var(--ink);font-family:inherit;}
+.sr-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent);}
+.sr-status{min-height:16px;margin:8px 2px 0;font-size:12px;color:var(--muted);}
+.sr-results{list-style:none;margin:10px 0 0;padding:0;max-height:420px;overflow:auto;}
+.sr-results li{padding:9px 0;border-top:1px solid var(--border2);font-size:13.5px;}
+.sr-results li:first-child{border-top:0;}
+.sr-results li.sr-empty{color:var(--faint);border-top:0;}
+.sr-results a{color:var(--ink);text-decoration:none;display:block;}
+.sr-results a:hover{color:var(--accent);}
+.sr-results .src{display:block;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--faint);margin-top:3px;}
+.sr-note{margin:12px 2px 0;font-size:11px;color:var(--faint);line-height:1.45;}
+"""
+
+SEARCH_SECTION = """
+    <p class="section-h"><svg class="sec-sign" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13 13 L17.5 17.5"/></svg> Search — find stories by meaning</p>
+    <section class="panel">
+      <div class="panel-h">
+        <h2>Semantic search</h2>
+        <span class="hint mono">ranked by meaning, not keywords · runs in your browser</span>
+      </div>
+      <div class="sr-wrap">
+        <input id="srInput" class="sr-input" type="search" autocomplete="off" spellcheck="false"
+          placeholder="e.g. drone incursions over NATO airspace" aria-label="Semantic search">
+        <div class="sr-status mono" id="srStatus"></div>
+        <ul class="sr-results" id="srResults"></ul>
+        <p class="sr-note">Runs entirely in your browser via <b>transformers.js</b> — your query is embedded with the same <b>BGE</b> family used to build the map and matched against the articles by cosine similarity. The first search downloads a small model (~30&nbsp;MB) from a CDN and caches it; after that it works offline. The rest of the page needs no network at all.</p>
+      </div>
+    </section>
+"""
+
+_SEARCH_SCRIPT = r"""
+(function(){
+  const SD = __SEARCH_DATA__;
+  const box = document.getElementById('srInput');
+  if(!box || !SD || !SD.b64) return;
+  const dim=SD.dim, n=SD.n, scale=SD.scale||127;
+  let I8;                                            // n*dim int8 doc vectors
+  try{
+    const bin=atob(SD.b64); const u8=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+    I8=new Int8Array(u8.buffer);
+  }catch(e){ return; }
+  const status=document.getElementById('srStatus');
+  const out=document.getElementById('srResults');
+  let extractor=null, loading=false;
+
+  async function ensureModel(){
+    if(extractor) return extractor;
+    if(loading) return null;
+    loading=true;
+    status.textContent='Loading the search model (one-time ~30 MB download)…';
+    try{
+      const T = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2');
+      T.env.allowLocalModels=false; T.env.useBrowserCache=true;
+      extractor = await T.pipeline('feature-extraction', SD.modelJs, {quantized:true});
+      status.textContent=''; return extractor;
+    }catch(e){
+      status.textContent='Search needs a one-time model download and a network connection — it looks unavailable right now.';
+      loading=false; return null;
+    }
+  }
+
+  function render(results){
+    if(!results.length){ out.innerHTML='<li class="sr-empty">No matches.</li>'; return; }
+    out.innerHTML = results.map(r=>
+      `<li><a href="${r.u}" target="_blank" rel="noopener">${r.h}`
+      +`<span class="src">${r.s} · ${r.d} · score ${r.score.toFixed(3)}</span></a></li>`).join('');
+  }
+
+  async function run(){
+    const qtext=box.value.trim();
+    if(qtext.length<2){ out.innerHTML=''; status.textContent=''; return; }
+    const ex=await ensureModel(); if(!ex) return;
+    status.textContent='Searching…';
+    let qv;
+    try{
+      const res=await ex((SD.instruction||'')+qtext,{pooling:'mean',normalize:true});
+      qv=res.data;                                   // Float32Array length dim (unit-norm)
+    }catch(e){ status.textContent='Could not embed the query.'; return; }
+    const scores=new Float32Array(n);
+    for(let i=0;i<n;i++){
+      let dot=0, nrm=0; const base=i*dim;
+      for(let k=0;k<dim;k++){ const dv=I8[base+k]/scale; dot+=qv[k]*dv; nrm+=dv*dv; }
+      scores[i]= nrm>0 ? dot/Math.sqrt(nrm) : 0;      // cosine (docs re-normalised after dequant)
+    }
+    const order=Array.from({length:n},(_,i)=>i).sort((a,b)=>scores[b]-scores[a]).slice(0,12);
+    render(order.map(i=>Object.assign({score:scores[i]}, SD.meta[i])));
+    status.textContent='';
+  }
+
+  let t=null;
+  box.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(run,300); });
+  box.addEventListener('keydown',e=>{ if(e.key==='Enter'){ clearTimeout(t); run(); } });
+})();
+"""
+
+
 def build_report_fragment(df, model=DEFAULT_MODEL, **_ignored):
     """Return (css, html, script) to splice into the main report. df must carry
     'body' (from pipeline.fetch_all). Topics are discovered here, independent of
@@ -1517,7 +1629,19 @@ def build_report_fragment(df, model=DEFAULT_MODEL, **_ignored):
     payload = {sc: build_view(df, sc, model) for sc in SCOPES}
     data_js = json.dumps(payload, ensure_ascii=False)
     script = _EMB_SCRIPT.replace("__EMB_DATA__", data_js)
-    return EMB_CSS, _EMB_SECTION, script
+    css, html = EMB_CSS, _EMB_SECTION
+    # Optional in-browser semantic search (transformers.js). Never fatal: a failure here
+    # must not cost us the (already-built) topic sections, so it's its own try/except.
+    try:
+        sidx = _build_search_index(df)
+        if sidx:
+            css = css + SEARCH_CSS
+            html = SEARCH_SECTION + html             # search bar first, above discovered topics
+            script = script + "\n" + _SEARCH_SCRIPT.replace(
+                "__SEARCH_DATA__", json.dumps(sidx, ensure_ascii=False))
+    except Exception as e:
+        print(f"[search] in-browser search index skipped ({type(e).__name__}: {e})")
+    return css, html, script
 
 
 def _standalone(df, model):

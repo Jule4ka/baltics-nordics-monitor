@@ -64,6 +64,31 @@ KEYWORDS = (
     r"artillery|shelling|front[\s-]?line|refugee|border)\w*"
 )
 
+# ── Hybrid filter: the SEMANTIC net that complements the KEYWORDS regex ───────
+# A story enters the report if it hits the KEYWORDS regex (above) OR its headline is
+# semantically close (embedding cosine) to these anchor phrases. The regex is the
+# high-precision net you can read; the anchors are the recall net that catches
+# defence/geopolitics stories whose wording the regex doesn't happen to list. Edit the
+# anchors freely — they're plain English sentences, embedded with the same BGE model as
+# the rest of the page. (Used by embeddings_analysis.hybrid_filter; `--filter regex`
+# turns the semantic net off, and it also degrades to regex if the embed stack is absent.)
+DEFENCE_ANCHORS = [
+    "military and national defence policy",
+    "the war in Ukraine and Russian aggression against its neighbours",
+    "NATO, the armed forces, weapons and security policy",
+    "sabotage, espionage, cyberattacks and hybrid warfare",
+    "drones, missiles and violations of airspace",
+    "border security, troop movements and military exercises",
+    "intelligence services, spies and foreign interference",
+]
+# A non-regex article passes the semantic net if its anchor cosine clears the Pth
+# percentile of the regex-matched set's OWN anchor cosine — i.e. "at least as defence-like
+# as the p-th percentile confirmed-defence headline". Auto-calibrates to corpus + model;
+# raise P to add fewer (stricter), lower it to add more. SEMANTIC_FLOOR is an absolute
+# cosine floor applied on top (0 = rely purely on the percentile bar).
+SEMANTIC_PCTL = 60
+SEMANTIC_FLOOR = 0.0
+
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; NordicsMonitor/1.0; research)"}
 
 # Site boilerplate to drop from article bodies (newsletter / correction / social prompts).

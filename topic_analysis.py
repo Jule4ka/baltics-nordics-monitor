@@ -43,10 +43,25 @@ def main():
     ap.add_argument("--embed-model", default=None,
                     help="embedding model id (default: bge-large via fastembed; "
                          "pass e.g. BAAI/bge-base-en-v1.5 for a lighter run)")
+    ap.add_argument("--filter", choices=["regex", "hybrid"], default="hybrid",
+                    help="matched-set filter. 'regex': headline KEYWORDS only (the original). "
+                         "'hybrid' (default): KEYWORDS regex UNION embedding similarity to the "
+                         "defence anchors in config.DEFENCE_ANCHORS — catches defence stories "
+                         "the regex misses. Falls back to regex if the embed stack is absent or "
+                         "--no-embed is set.")
     args = ap.parse_args()
 
     df_all = load_data()
-    df = filter_themes(df_all)
+    # Hybrid filter needs the embedding stack; with --no-embed (fast build) stay on regex.
+    if args.filter == "hybrid" and args.embed:
+        try:
+            import embeddings_analysis as emb
+            df = emb.hybrid_filter(df_all, args.embed_model or emb.DEFAULT_MODEL)
+        except Exception as e:
+            print(f"[filter] hybrid unavailable ({type(e).__name__}: {e}); regex only")
+            df = filter_themes(df_all)
+    else:
+        df = filter_themes(df_all)
     shares = compute_shares(df_all, df)
     df["body"] = fetch_all(df["url"].tolist())
     df, themes, keywords = analyse(df)

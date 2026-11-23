@@ -68,7 +68,10 @@ Only the **English editions** are scraped.
                                                         ▼
                                             ┌───────────────────────┐
                                             │  topic_analysis.py     │  filter → fetch bodies →
-                                            │                        │  TF-IDF → themes → build
+                                            │                        │  keyword themes + word freq →
+                                            │                        │  spaCy NER → embeddings
+                                            │                        │  (BERTopic/HDBSCAN) + search →
+                                            │                        │  build
                                             └───────────┬───────────┘
                                                         ▼
                                             ┌───────────────────────┐
@@ -94,14 +97,17 @@ baltics-nordics-monitor/
 │   ├── baltics-monitor-artifact.html  #   content-only variant (no <html>/<head>; for embedding)
 │   ├── baltics-monitor-data.json      #   the computed data behind the page
 │   ├── baltics-monitor-clustered.csv  #   every matched article tagged with its theme(s)
+│   ├── body_cache.json                #   COMMITTED — scraped article bodies keyed by URL (download once)
 │   └── emb_cache/                     #   COMMITTED — cached embeddings, keyed by URL (incremental)
 │
 │   # ── the pipeline, split into focused modules (edit whichever part you mean) ──
 ├── topic_analysis.py                  # thin CLI entrypoint — just wires the steps together
 ├── config.py                          # sources, the KEYWORDS filter, THEME buckets, palette
-├── pipeline.py                        # load → filter → fetch → analyse (TF-IDF / t-SNE)
+├── pipeline.py                        # load → filter → fetch → analyse (keyword buckets + word freq)
+├── ner.py                             # spaCy named-entity extraction (people / orgs / places)
 ├── render.py                          # assembles the self-contained page (embeddings folded in)
-├── embeddings_analysis.py             # the semantic-embeddings sections (fastembed → UMAP → HDBSCAN)
+├── embeddings_analysis.py             # semantic layer: fastembed → UMAP → BERTopic/HDBSCAN,
+│                                      #   + the in-browser transformers.js search index
 ├── assets.py                          # loads the three front-end files below
 ├── assets/                            # THE FRONT-END — edit these directly
 │   ├── report.css                     #   styles
@@ -116,8 +122,9 @@ baltics-nordics-monitor/
 └── .github/workflows/                 # the once-a-day automation
 ```
 
-The embeddings sections are now part of the main page (after the keyword-bucket
-sections), not a separate file. Build a fast, embeddings-free page locally with
+The embeddings + search sections are now part of the main page (after the keyword-bucket,
+timeline and entity sections), not a separate file. Build a fast, embeddings-free page
+locally (keyword-bucket / timeline / entity sections only) with
 `python topic_analysis.py --no-embed`.
 
 ## How it works, step by step
@@ -139,28 +146,44 @@ Two of the three are easy; one is not:
 
 ### 2. Analyse & build the report (`topic_analysis.py`)
 
-1. **Load** the three master CSVs (repairing `lrt_lt`'s text encoding), dedupe by URL.
+1. **Load** the three master CSVs, dedupe by URL. A load-time `ftfy` pass repairs any
+   mojibake that slipped into older rows (see the note below on `lrt_lt`).
 2. **Filter** headlines to the defence/geopolitics keyword set (Ukraine, Russia, NATO,
-   drones, border, China, sabotage, …).
-3. **Per-country share** — for Act 1, how many of each source's headlines matched
-   (`matched ÷ total`), plus each source's date range.
-4. **Fetch the full article body** for every matched article (8 in parallel; failures
-   skipped).
-5. **Vectorise & lay out** — TF-IDF → TruncatedSVD (LSA) → **t-SNE** into a 2-D map,
-   so articles with similar wording sit near each other. *(This is the "proximity"; there
-   is no more KMeans clustering — that was removed because the clusters overlapped and
-   meant nothing.)*
-6. **Assign themes** by hand-authored keyword buckets — **not** clustering. Each article
-   is tagged with **every** bucket its words hit (headline weighted ×3 over body) and
-   coloured by the strongest, so it can appear under more than one theme (*multi-label*).
-   Buckets: Ukraine, Russia & Kremlin, NATO & defence, Drones & airspace, Border & migration,
-   Hybrid warfare, China & Indo-Pacific, or "Other defence". "NATO & defence" is the broad
-   catch-all, so it loses scoring ties to a more specific theme.
-7. **Keyword frequency** — count, across the **headlines**, how many articles mention
-   each word (merging variants: russia/russian → russia, drones → drone, …).
-8. **Render** (`render.py`) the report to `analysis/baltics-monitor.html` (+ the JSON, the
-   tagged CSV, and the content-only artifact variant). The embeddings sections (below) are
-   spliced in here, after the keyword-bucket sections.
+   drones, border, brigade, ammunition, smuggling, China, sabotage, …) — a single
+   case-insensitive regex (`config.KEYWORDS`) matched against the **headline only**.
+3. **Per-country share** — how many of each source's headlines matched (`matched ÷ total`),
+   plus each source's date range (the country map + the "defence share" numbers).
+4. **Fetch the full article body** for each matched article (8 in parallel; failures
+   skipped). Bodies are **cached by URL** in `analysis/body_cache.json`, so the first run
+   downloads everything and later runs fetch only the *newly matched* articles — the slow
+   download happens once. Bodies feed the theme tagging, the entity text and the embeddings.
+5. **Assign keyword-bucket themes** — hand-authored regex buckets, **not** clustering.
+   Each article is tagged with **every** bucket its words hit (headline weighted ×3 over
+   body) and coloured by the strongest, so it can appear under more than one theme
+   (*multi-label*). Buckets: Ukraine, Russia & Kremlin, NATO & defence, Drones & airspace,
+   Border & migration, Hybrid warfare, China & Indo-Pacific, or "Other defence". "NATO &
+   defence" is the broad catch-all, so it loses scoring ties to a more specific theme.
+   *(There is no TF-IDF / SVD / t-SNE / KMeans here any more — the old vector layout and
+   clustering were removed; the semantic map now lives entirely in the embeddings step.)*
+6. **Keyword frequency** — count, across the **headlines**, in how many articles each word
+   appears (document frequency, not total hits), after dropping stopwords + the Baltic
+   countries' own names/capitals and merging variants (russia/russian → russia, drones →
+   drone, …). Top 16 terms, each keeping the list of articles that use it.
+7. **Named entities** (`ner.py`) — spaCy (`en_core_web_sm`) pulls people / organizations /
+   places from headline + body for the entity network (degrades to none if spaCy is absent).
+8. **Embeddings layer** (`embeddings_analysis.py`, below) — discovered topics, escalation
+   tone, and the in-browser search index.
+9. **Render** (`render.py`) the report to `analysis/baltics-monitor.html` (+ the JSON, the
+   tagged CSV, and the content-only artifact variant). The embeddings + search sections are
+   spliced in here, after the keyword-bucket / timeline / entity sections.
+
+> **Why the `lrt_lt` CSV used to look mangled.** The LRT scraper fetched its homepage with
+> `requests` and parsed `response.text`; when the server omits a charset, `requests` guesses
+> latin-1, which turns UTF-8 (`'`, `"`, Lithuanian `ė/š/ų`) into mojibake in the saved CSV.
+> The scraper now parses `response.content` (bytes), so BeautifulSoup sniffs the real
+> encoding — fresh rows are clean at the source. The existing rows were repaired in a
+> one-time pass, and `pipeline.load_data()` still runs `ftfy` on load as a safety net for any
+> legacy mojibake.
 
 The page is **fully self-contained** — inline CSS/JS, the Baltic map baked in as SVG,
 no external requests — so it works as a plain file, in an email, or embedded anywhere.
@@ -174,55 +197,80 @@ no external requests — so it works as a plain file, in an email, or embedded a
 default; pass `--no-embed` for a fast, embeddings-free local build:
 
 ```bash
-venv/Scripts/python.exe topic_analysis.py             # full page (with embeddings)
-venv/Scripts/python.exe topic_analysis.py --no-embed  # fast: TF-IDF sections only
-# higher-quality model (the workshop's pick — heavier, pulls torch on first use):
-venv/Scripts/python.exe topic_analysis.py --embed-model BAAI/bge-large-en-v1.5
+venv/Scripts/python.exe topic_analysis.py             # full page (with embeddings + search)
+venv/Scripts/python.exe topic_analysis.py --no-embed  # fast: keyword-bucket / timeline / entity sections only
+# lighter embedding model (bge-base instead of the default bge-large):
+venv/Scripts/python.exe topic_analysis.py --embed-model BAAI/bge-base-en-v1.5
 # or run the module on its own -> analysis/embeddings-prototype.html
 venv/Scripts/python.exe embeddings_analysis.py
 ```
 
-What it does, for **two text scopes side by side** — `content` (headline + body) and
-`headline` (titles only):
+What it does (scope = `content`, i.e. headline + body):
 
 1. **Embed** each article into a semantic vector — meaning, not word overlap. Vectors are
    **cached by URL** (`analysis/emb_cache/`), so each run only embeds *new* articles.
+   *(Caveat: the cache is keyed by URL only, so if an article's text changes but its URL
+   doesn't, the old vector is reused until that URL next appears new.)*
 2. **UMAP → 2-D** map with `metric="cosine"` (compare *directions*, not distance — in high
    dimensions Euclidean distance collapses; embedding meaning lives in the angle).
-3. **UMAP → 5-D → HDBSCAN** density clustering; `cluster == -1` are **outliers**.
-4. **TF-IDF** top terms label each discovered cluster (they *drift* between runs — that's the
-   nature of unsupervised topics, and why the curated buckets remain the primary labels).
-5. **Anomalies** list (stories that fit no cluster) + a **mislabel audit** that flags articles
-   whose semantic neighbours mostly carry a *different* regex theme than the buckets assigned.
+3. **Cluster** with **BERTopic** when installed, else a hand-rolled **UMAP → 5-D → HDBSCAN**
+   (identical recipe). `cluster == -1` are **outliers**; borderline noise is then folded into
+   the nearest cluster, à la BERTopic's `reduce_outliers`. Set `BALTICS_NO_BERTOPIC=1` to
+   force the built-in path.
+4. **Label** each cluster with a KeyBERT-style, class-based-TF-IDF phrase (the term whose
+   *meaning* sits closest to the cluster centroid), and **track topics across days** so a
+   topic keeps its name + colour build to build.
+5. **Escalation-tone** scoring per article (cosine to anchor phrases), a **topic-river**
+   streamgraph, and an **anomalies** list of the most isolated stories.
 
-**Model & install.** Default is `BAAI/bge-base-en-v1.5` via **fastembed** (ONNX, no torch —
-CI-light); `BAAI/bge-large-en-v1.5` (top of the [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard),
-English) is a one-flag swap. HDBSCAN ships in scikit-learn 1.9; the extra deps are
-`umap-learn` and `fastembed` (and `sentence-transformers` only if you pick a model fastembed
-lacks). Text is the broadcasters' **English** editions, so an English model fits.
+**In-browser semantic search (transformers.js).** The corpus is also embedded with a small
+model (`BAAI/bge-small-en-v1.5`) whose weights are int8-quantised and inlined (~0.5 KB/article).
+The search box embeds *your query* client-side with the transformers.js twin
+(`Xenova/bge-small-en-v1.5`, loaded on first use from a CDN) and ranks articles by cosine
+similarity. This is the one feature that touches the network — and only when you search; the
+model is cached after the first (~30 MB) download and the rest of the page needs no network.
 
-> **Read it as an aid, not the primary labels:** a semantic scatter with more than three
-> colour-coded clusters can't be made colour-blind-safe by colour alone, cluster names are
-> unstable run-to-run, and true query search would need a runtime the static site doesn't
-> have. It's a **navigation / anomaly-finding** aid — the curated keyword buckets remain the
-> primary, stable themes. The daily CI installs `fastembed`/`umap-learn` in a non-fatal step,
-> so if those ever fail to install the page just falls back to the TF-IDF-only sections.
+**Model & install.** Default is `BAAI/bge-large-en-v1.5` via **fastembed** (ONNX, no torch —
+top of the English [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard));
+`--embed-model BAAI/bge-base-en-v1.5` is a lighter one-flag swap. HDBSCAN ships in
+scikit-learn ≥1.9; the extra deps are `umap-learn`, `fastembed` and (optional) `bertopic`
+(plus `sentence-transformers` only if you pick a model fastembed lacks). Text is the
+broadcasters' **English** editions, so an English model fits.
+
+> **Read it as an aid, not the primary labels:** cluster names are unstable run-to-run and a
+> many-cluster scatter can't be made colour-blind-safe by colour alone. It's a
+> **navigation / anomaly-finding** aid — the curated keyword buckets remain the primary,
+> stable themes. Every heavy dep (`fastembed`, `umap-learn`, `bertopic`) is imported lazily
+> and installed in a **non-fatal** CI step: if any fails, the page falls back cleanly
+> (BERTopic → built-in HDBSCAN; whole embedding stack missing → keyword-bucket page with no
+> embeddings/search).
 
 ## The report — what's on the page
 
-Three "acts":
+Top to bottom:
 
 1. **The numbers — how much is defence?**
    A map of Estonia/Latvia/Lithuania, each country shaded by its defence-news share,
    with per-country date ranges and a coverage caption. (Read the on-page caveat: the
    shares are **not** strictly comparable between countries — see *Caveats*.)
-2. **The themes — what is it about?**
-   The proximity map: each article is a dot, coloured and labelled by its theme; nearby
-   dots share wording. A legend toggles themes; below it, one card per theme lists its
-   articles (newest first) when you click it.
+2. **The timeline — when, and from where?**
+   Defence headlines per day, stacked by country; drag the range handles to zoom and
+   click a span to list its articles. A legend toggles each country on/off.
 3. **The words — what comes up most.**
    A bar chart of the most frequent headline terms; click a word to list the articles
    whose headline contains it (newest first).
+4. **The players — who is named beside whom.**
+   The spaCy entity network (people / orgs / places; an edge = a shared article), with a
+   web view, a co-occurrence matrix view, and a per-entity dossier (mentions, tone, weekly
+   trend, country split, neighbours).
+5. **Search — find stories by meaning.**
+   A semantic search box (transformers.js, in-browser) that ranks articles by meaning
+   rather than keywords.
+6. **Discovered topics — clusters found by meaning.**
+   One panel (*"Topic map & anomalies"*): the embeddings map (BERTopic/HDBSCAN topics,
+   coloured and labelled), a topic-river streamgraph, an escalation-tone heatmap, the
+   clickable topic list, and an anomalies list. Built from the text, *independent* of the
+   keyword buckets.
 
 The design is a deliberate **Baltic woven-textile** look — a madder-red + gold + cream
 palette (deep-wine in dark mode), a patterned masthead, gold-framed panels, folk-sign
@@ -236,6 +284,11 @@ and dark automatically.
 python -m venv venv
 venv/Scripts/python -m pip install jupyter lxml pandas requests beautifulsoup4 html5lib scikit-learn playwright playwright-stealth
 venv/Scripts/python -m playwright install chromium
+# analysis extras (headline mojibake repair + spaCy entities)
+venv/Scripts/python -m pip install ftfy spacy && venv/Scripts/python -m spacy download en_core_web_sm
+# semantic layer (embeddings + search + BERTopic clustering); all optional — the build
+# degrades gracefully if any are missing. transformers.js needs NO install (CDN, in-browser).
+venv/Scripts/python -m pip install fastembed umap-learn bertopic
 
 # scrape (run each notebook), then build the report
 jupyter nbconvert --to notebook --execute scrapers/err_ee.ipynb --stdout
@@ -254,16 +307,20 @@ preview.
 
 ## The daily automation (GitHub Actions)
 
-`.github/workflows/dklsdjknsdkjnsd.yml` runs **once a day at 05:00 UTC** (and on demand
-via the **Run workflow** button). Each run:
+Automation is split across **two** workflows (both also runnable on demand via the
+**Run workflow** button), scheduled on opposite hours so a scrape and a build never
+collide:
 
-1. installs dependencies (incl. Playwright + Chromium),
-2. executes the three scraper notebooks,
-3. runs `topic_analysis.py`,
-4. commits the refreshed `data/` + `analysis/` back to **this** repo,
-5. **publishes** the report to the website repo (next section).
+- **`.github/workflows/scrape.yml`** (`scrape`) — **every 2 hours, on even hours**
+  (`0 */2 * * *`). Installs Playwright + Chromium, executes the three scraper notebooks,
+  and commits the refreshed `data/` back to **this** repo. It does **not** build the page.
+- **`.github/workflows/dashboard.yml`** (`dashboard`) — **twice a day, on odd hours**
+  (01:00 and 13:00 UTC). Installs the analysis deps (core must-succeed; embeddings, NER,
+  BERTopic and the LLM-labeller each in their own optional `continue-on-error` step), runs
+  `topic_analysis.py`, commits the refreshed `analysis/` back to this repo, and
+  **publishes** the report to the website repo (next section).
 
-To trigger it by hand: **Actions → "daily" → Run workflow**.
+To trigger by hand: **Actions → "scrape"** or **"dashboard" → Run workflow**.
 
 ## Publishing explained (the complicated part)
 
