@@ -53,6 +53,14 @@ KEYWORDS = (
     r"readiness|preparedness|resilience|civil\s+defen[cs]e|shelter|evacuat|"
     r"naval|navy|tank|migrant|threat|special\s+forces|false.?flag|\bhack|"
     r"intelligence\s+service|counter.?intelligence|\bcia\b|\bfsb\b|\bgru\b|\bkgb\b|"
+    # Force structure / defence industry / home defence / border-hybrid additions:
+    # catches the German NATO brigade in Lithuania, ammunition & Rheinmetall plants,
+    # National Guard / security-service / separatist cases, military drills & exercises,
+    # and the Belarusian smuggling-balloon campaign — all missed before (LSM/LRT esp.).
+    r"brigade|battalion|platoon|munition|rheinmetall|separatis|guardsm|"
+    r"national\s+guard|border\s+guard|coast\s+guard|home\s+guard|"
+    r"security\s+service|state\s+security|smuggl|drill|war\s?game|"
+    r"military\s+exercise|joint\s+exercise|combat\s+exercise|"
     r"artillery|shelling|front[\s-]?line|refugee|border)\w*"
 )
 
